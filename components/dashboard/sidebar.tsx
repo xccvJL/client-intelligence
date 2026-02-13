@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { TeamSelector } from "@/components/dashboard/team-selector";
+import { useTeamContext } from "@/components/dashboard/team-context";
 
 // The main navigation sidebar. Highlights the current page so
 // you always know where you are.
@@ -66,6 +68,7 @@ function NavIcon({ icon }: { icon: string }) {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { showAllAccounts, setShowAllAccounts } = useTeamContext();
 
   return (
     <aside className="w-64 border-r bg-muted/30 min-h-screen p-4 flex flex-col">
@@ -103,6 +106,18 @@ export function Sidebar() {
       <Separator className="my-4" />
 
       <TeamSelector />
+
+      <div className="flex items-center justify-between mt-3">
+        <label htmlFor="show-all-accounts" className="text-xs text-muted-foreground font-medium">
+          Show all accounts
+        </label>
+        <Switch
+          id="show-all-accounts"
+          size="sm"
+          checked={showAllAccounts}
+          onCheckedChange={setShowAllAccounts}
+        />
+      </div>
 
       <Separator className="my-4" />
 

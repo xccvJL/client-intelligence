@@ -18,9 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Client, DealStage } from "@/lib/types";
+import type { Client, Deal, DealStage } from "@/lib/types";
 
-// Dialog form for creating a new deal.
+// Dialog form for creating or editing a deal.
 // Fields: title, stage, amount, close date, notes, client.
 
 interface DealFormProps {
@@ -28,6 +28,7 @@ interface DealFormProps {
   onOpenChange: (open: boolean) => void;
   clients: Client[];
   defaultClientId?: string;
+  deal?: (Deal & { clients?: { name: string } | null }) | null;
   onSubmit: (deal: {
     client_id: string;
     title: string;
@@ -43,6 +44,7 @@ export function DealForm({
   onOpenChange,
   clients,
   defaultClientId,
+  deal,
   onSubmit,
 }: DealFormProps) {
   const [title, setTitle] = useState("");
@@ -52,16 +54,27 @@ export function DealForm({
   const [notes, setNotes] = useState("");
   const [clientId, setClientId] = useState(defaultClientId ?? "");
 
+  const isEditing = !!deal;
+
   useEffect(() => {
     if (open) {
-      setTitle("");
-      setStage("lead");
-      setAmount("");
-      setCloseDate("");
-      setNotes("");
-      setClientId(defaultClientId ?? "");
+      if (deal) {
+        setTitle(deal.title);
+        setStage(deal.stage);
+        setAmount(deal.amount != null ? String(deal.amount) : "");
+        setCloseDate(deal.close_date ?? "");
+        setNotes(deal.notes ?? "");
+        setClientId(deal.client_id);
+      } else {
+        setTitle("");
+        setStage("lead");
+        setAmount("");
+        setCloseDate("");
+        setNotes("");
+        setClientId(defaultClientId ?? "");
+      }
     }
-  }, [open, defaultClientId]);
+  }, [open, defaultClientId, deal]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,7 +95,7 @@ export function DealForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Deal</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Deal" : "Add Deal"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -166,7 +179,7 @@ export function DealForm({
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim() || !clientId}>
-              Create Deal
+              {isEditing ? "Save Changes" : "Create Deal"}
             </Button>
           </DialogFooter>
         </form>

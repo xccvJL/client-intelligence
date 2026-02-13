@@ -10,6 +10,7 @@ interface TaskListProps {
   tasks: (Task & { clients?: { name: string } | null })[];
   teamMembers: TeamMember[];
   onToggleStatus?: (taskId: string, done: boolean) => void;
+  onTaskClick?: (task: Task & { clients?: { name: string } | null }) => void;
   emptyMessage?: string;
 }
 
@@ -17,6 +18,7 @@ export function TaskList({
   tasks,
   teamMembers,
   onToggleStatus,
+  onTaskClick,
   emptyMessage = "No tasks yet",
 }: TaskListProps) {
   if (tasks.length === 0) {
@@ -53,6 +55,7 @@ export function TaskList({
                 task={task}
                 assigneeName={task.assignee_id ? memberMap.get(task.assignee_id) : undefined}
                 onToggleStatus={onToggleStatus}
+                onClick={onTaskClick}
               />
             ))}
           </div>
@@ -65,6 +68,7 @@ export function TaskList({
           task={task}
           assigneeName={task.assignee_id ? memberMap.get(task.assignee_id) : undefined}
           onToggleStatus={onToggleStatus}
+          onClick={onTaskClick}
         />
       ))}
     </div>

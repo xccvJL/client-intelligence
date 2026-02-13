@@ -18,6 +18,7 @@ const stageConfig: Record<DealStage, { label: string; className: string }> = {
 interface DealCardProps {
   deal: Deal & { clients?: { name: string } | null };
   onStageChange?: (dealId: string, newStage: DealStage) => void;
+  onClick?: (deal: Deal & { clients?: { name: string } | null }) => void;
 }
 
 function formatCurrency(amount: number | null) {
@@ -29,7 +30,7 @@ function formatCurrency(amount: number | null) {
   }).format(amount);
 }
 
-export function DealCard({ deal, onStageChange }: DealCardProps) {
+export function DealCard({ deal, onStageChange, onClick }: DealCardProps) {
   const stage = stageConfig[deal.stage];
   const closeDateLabel = deal.close_date
     ? new Date(deal.close_date).toLocaleDateString("en-US", {
@@ -46,7 +47,10 @@ export function DealCard({ deal, onStageChange }: DealCardProps) {
     : null;
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={`hover:shadow-md transition-shadow ${onClick ? "cursor-pointer" : ""}`}
+      onClick={() => onClick?.(deal)}
+    >
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium leading-snug">
@@ -71,7 +75,7 @@ export function DealCard({ deal, onStageChange }: DealCardProps) {
         </div>
         {nextStage && onStageChange && (
           <button
-            onClick={() => onStageChange(deal.id, nextStage)}
+            onClick={(e) => { e.stopPropagation(); onStageChange(deal.id, nextStage); }}
             className="mt-2 text-xs text-primary hover:underline"
           >
             Move to {stageConfig[nextStage].label}

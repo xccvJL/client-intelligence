@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { WorkflowCard } from "@/components/dashboard/workflow-card";
 import { WorkflowTemplateForm } from "@/components/dashboard/workflow-template-form";
 import { ApplyWorkflowDialog } from "@/components/dashboard/apply-workflow-dialog";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { WorkflowTemplate, WorkflowStep, Client } from "@/lib/types";
 
 // Workflows page — lists all workflow templates as cards.
@@ -17,75 +18,8 @@ const placeholderClients: Client[] = [
   { id: "3", name: "Initech", domain: "initech.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
 ];
 
-// The pre-built Thrive Local Onboarding template — matches the real process
-const thriveOnboardingTemplate: WorkflowTemplate = {
-  id: "wf-thrive-onboarding",
-  name: "Thrive Local Onboarding",
-  description:
-    "Standard onboarding workflow for new Thrive Local clients. Covers the full handoff from Sales through Account Management.",
-  steps: [
-    {
-      title: "Mark Thrive Local status on deal",
-      description: "Update the deal stage to reflect Thrive Local enrollment.",
-      assigned_role: "sales",
-      priority: "medium",
-      due_in_days: 0,
-      order: 1,
-    },
-    {
-      title: "Set up project overview, add Tim & Ralph",
-      description:
-        "Create the project in the system and add key team members.",
-      assigned_role: "onboarding",
-      priority: "high",
-      due_in_days: 1,
-      order: 2,
-    },
-    {
-      title: "Send intro email with Calendly links",
-      description:
-        "Send the client an introduction email with scheduling links for their onboarding calls.",
-      assigned_role: "sales",
-      priority: "high",
-      due_in_days: 1,
-      order: 3,
-    },
-    {
-      title: "Alert specialists when GBP is connected",
-      description:
-        "Notify the specialist team once the client's Google Business Profile is connected.",
-      assigned_role: "onboarding",
-      priority: "medium",
-      due_in_days: 3,
-      order: 4,
-    },
-    {
-      title: "Monitor status, help client connect platforms",
-      description:
-        "Track progress and assist the client with connecting their various platforms and accounts.",
-      assigned_role: "onboarding",
-      priority: "medium",
-      due_in_days: 7,
-      order: 5,
-    },
-    {
-      title: "Handoff to AM if no movement",
-      description:
-        "If the client hasn't made progress, escalate to the Account Manager for direct outreach.",
-      assigned_role: "account_manager",
-      priority: "low",
-      due_in_days: 14,
-      order: 6,
-    },
-  ],
-  created_at: "2026-01-15T00:00:00Z",
-  updated_at: "2026-01-15T00:00:00Z",
-};
-
 export default function WorkflowsPage() {
-  const [templates, setTemplates] = useState<WorkflowTemplate[]>([
-    thriveOnboardingTemplate,
-  ]);
+  const { workflowTemplates: templates, setWorkflowTemplates: setTemplates } = useTeamContext();
   const [formOpen, setFormOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] =
     useState<WorkflowTemplate | null>(null);

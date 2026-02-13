@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
-import type { TeamMember, AccountMember } from "@/lib/types";
+import type { TeamMember, AccountMember, WorkflowTemplate } from "@/lib/types";
 
 // This context holds the "current user" — the team member who is
 // currently using the app. Since there's no login yet, we simulate
@@ -24,12 +24,36 @@ const placeholderAccountMembers: AccountMember[] = [
   { id: "am5", client_id: "3", team_member_id: "tm2", role: "member", created_at: "" },
 ];
 
+// Pre-built Thrive Local Onboarding template — shared across workflows and tasks
+const defaultTemplates: WorkflowTemplate[] = [
+  {
+    id: "wf-thrive-onboarding",
+    name: "Thrive Local Onboarding",
+    description:
+      "Standard onboarding workflow for new Thrive Local clients. Covers the full handoff from Sales through Account Management.",
+    steps: [
+      { title: "Mark Thrive Local status on deal", description: "Update the deal stage to reflect Thrive Local enrollment.", assigned_role: "sales", priority: "medium", due_in_days: 0, order: 1 },
+      { title: "Set up project overview, add Tim & Ralph", description: "Create the project in the system and add key team members.", assigned_role: "onboarding", priority: "high", due_in_days: 1, order: 2 },
+      { title: "Send intro email with Calendly links", description: "Send the client an introduction email with scheduling links for their onboarding calls.", assigned_role: "sales", priority: "high", due_in_days: 1, order: 3 },
+      { title: "Alert specialists when GBP is connected", description: "Notify the specialist team once the client's Google Business Profile is connected.", assigned_role: "onboarding", priority: "medium", due_in_days: 3, order: 4 },
+      { title: "Monitor status, help client connect platforms", description: "Track progress and assist the client with connecting their various platforms and accounts.", assigned_role: "onboarding", priority: "medium", due_in_days: 7, order: 5 },
+      { title: "Handoff to AM if no movement", description: "If the client hasn't made progress, escalate to the Account Manager for direct outreach.", assigned_role: "account_manager", priority: "low", due_in_days: 14, order: 6 },
+    ],
+    created_at: "2026-01-15T00:00:00Z",
+    updated_at: "2026-01-15T00:00:00Z",
+  },
+];
+
 interface TeamContextValue {
   currentUser: TeamMember | null;
   setCurrentUser: (member: TeamMember) => void;
   teamMembers: TeamMember[];
   accountMembers: AccountMember[];
   setAccountMembers: React.Dispatch<React.SetStateAction<AccountMember[]>>;
+  showAllAccounts: boolean;
+  setShowAllAccounts: (show: boolean) => void;
+  workflowTemplates: WorkflowTemplate[];
+  setWorkflowTemplates: React.Dispatch<React.SetStateAction<WorkflowTemplate[]>>;
   // Helper: returns the client IDs this user can access
   getAccessibleClientIds: (teamMemberId?: string) => string[];
 }
@@ -40,6 +64,8 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
   const [teamMembers] = useState<TeamMember[]>(placeholderTeamMembers);
   const [accountMembers, setAccountMembers] = useState<AccountMember[]>(placeholderAccountMembers);
+  const [showAllAccounts, setShowAllAccounts] = useState(false);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>(defaultTemplates);
 
   // Default to the first team member on mount
   useEffect(() => {
@@ -64,6 +90,10 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
         teamMembers,
         accountMembers,
         setAccountMembers,
+        showAllAccounts,
+        setShowAllAccounts,
+        workflowTemplates,
+        setWorkflowTemplates,
         getAccessibleClientIds,
       }}
     >

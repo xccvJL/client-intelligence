@@ -18,10 +18,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Client, TeamMember, TaskPriority, TeamRole } from "@/lib/types";
+import type { Client, TeamMember, Task, TaskPriority, TeamRole } from "@/lib/types";
 
 // Dialog form for creating a new task.
 // Has fields for title, description, priority, assigned role, assignee, due date, and client.
+
+interface TaskDefaults {
+  title?: string;
+  description?: string;
+  priority?: TaskPriority;
+  assigned_role?: TeamRole | null;
+  assignee_id?: string;
+  due_date?: string;
+  client_id?: string;
+}
 
 interface TaskFormProps {
   open: boolean;
@@ -29,6 +39,8 @@ interface TaskFormProps {
   clients: Client[];
   teamMembers: TeamMember[];
   defaultClientId?: string;
+  task?: (Task & { clients?: { name: string } | null }) | null;
+  defaults?: TaskDefaults | null;
   onSubmit: (task: {
     client_id: string;
     title: string;
@@ -46,6 +58,8 @@ export function TaskForm({
   clients,
   teamMembers,
   defaultClientId,
+  task,
+  defaults,
   onSubmit,
 }: TaskFormProps) {
   const [title, setTitle] = useState("");
@@ -56,18 +70,38 @@ export function TaskForm({
   const [dueDate, setDueDate] = useState("");
   const [clientId, setClientId] = useState(defaultClientId ?? "");
 
-  // Reset form when dialog opens
+  const isEditing = !!task;
+
+  // Populate form from existing task, defaults, or reset for new
   useEffect(() => {
     if (open) {
-      setTitle("");
-      setDescription("");
-      setPriority("medium");
-      setAssignedRole("");
-      setAssigneeId("");
-      setDueDate("");
-      setClientId(defaultClientId ?? "");
+      if (task) {
+        setTitle(task.title);
+        setDescription(task.description ?? "");
+        setPriority(task.priority);
+        setAssignedRole(task.assigned_role ?? "");
+        setAssigneeId(task.assignee_id ?? "");
+        setDueDate(task.due_date ?? "");
+        setClientId(task.client_id);
+      } else if (defaults) {
+        setTitle(defaults.title ?? "");
+        setDescription(defaults.description ?? "");
+        setPriority(defaults.priority ?? "medium");
+        setAssignedRole(defaults.assigned_role ?? "");
+        setAssigneeId(defaults.assignee_id ?? "");
+        setDueDate(defaults.due_date ?? "");
+        setClientId(defaults.client_id ?? defaultClientId ?? "");
+      } else {
+        setTitle("");
+        setDescription("");
+        setPriority("medium");
+        setAssignedRole("");
+        setAssigneeId("");
+        setDueDate("");
+        setClientId(defaultClientId ?? "");
+      }
     }
-  }, [open, defaultClientId]);
+  }, [open, defaultClientId, task, defaults]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -89,7 +123,7 @@ export function TaskForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Task</DialogTitle>
+          <DialogTitle>{isEditing ? "Edit Task" : "Add Task"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -193,7 +227,7 @@ export function TaskForm({
               Cancel
             </Button>
             <Button type="submit" disabled={!title.trim() || !clientId}>
-              Create Task
+              {isEditing ? "Save Changes" : "Create Task"}
             </Button>
           </DialogFooter>
         </form>

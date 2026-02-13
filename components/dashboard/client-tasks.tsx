@@ -4,7 +4,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TaskList } from "./task-list";
 import { TaskForm } from "./task-form";
-import type { Task, TaskStatus, Client, TeamMember } from "@/lib/types";
+import { TaskDetailDialog } from "./task-detail-dialog";
+import { TaskFromTemplateDialog } from "./task-from-template-dialog";
+import { WorkflowTemplateForm } from "./workflow-template-form";
+import { useTeamContext } from "./team-context";
+import type { Task, TaskStatus, Client, TeamMember, WorkflowStep } from "@/lib/types";
 
 // Shows the tasks for a specific client inside the client detail page.
 // Includes inline status toggles and an "Add Task" button.
@@ -31,6 +35,14 @@ const placeholderTasks: (Task & { clients?: { name: string } | null })[] = [
 export function ClientTasks({ clientId }: ClientTasksProps) {
   const [tasks, setTasks] = useState(placeholderTasks);
   const [formOpen, setFormOpen] = useState(false);
+  const [detailTask, setDetailTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
+  const [editingTask, setEditingTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateDefaults, setTemplateDefaults] = useState<WorkflowStep | null>(null);
+  const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
+
+  const { workflowTemplates, setWorkflowTemplates } = useTeamContext();
+  const memberMap = new Map(placeholderTeam.map((m) => [m.id, m.name]));
 
   function handleToggleStatus(taskId: string, done: boolean) {
     setTasks((prev) =>
@@ -46,20 +58,31 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
         <p className="text-sm text-muted-foreground">
           {tasks.length} task{tasks.length !== 1 ? "s" : ""}
         </p>
-        <Button size="sm" onClick={() => setFormOpen(true)}>
-          Add Task
-        </Button>
+        <div className="flex items-center gap-2">
+          {tasks.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setSaveAsTemplateOpen(true)}>
+              Save as Template
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => setTemplateDialogOpen(true)}>
+            From Template
+          </Button>
+          <Button size="sm" onClick={() => setFormOpen(true)}>
+            Add Task
+          </Button>
+        </div>
       </div>
 
       <TaskList
         tasks={tasks}
         teamMembers={placeholderTeam}
         onToggleStatus={handleToggleStatus}
+        onTaskClick={(task) => setDetailTask(task)}
         emptyMessage="No tasks for this account yet"
       />
 
       <TaskForm
-        open={formOpen}
+        open={formOpen && !templateDefaults}
         onOpenChange={setFormOpen}
         clients={placeholderClients}
         teamMembers={placeholderTeam}
@@ -78,6 +101,119 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
             clients: null,
           };
           setTasks((prev) => [newTask, ...prev]);
+        }}
+      />
+
+      {detailTask && (
+        <TaskDetailDialog
+          open={!!detailTask}
+          onOpenChange={(open) => { if (!open) setDetailTask(null); }}
+          task={detailTask}
+          assigneeName={detailTask.assignee_id ? memberMap.get(detailTask.assignee_id) : undefined}
+          onEdit={() => {
+            setEditingTask(detailTask);
+            setDetailTask(null);
+          }}
+        />
+      )}
+
+      <TaskForm
+        open={!!editingTask}
+        onOpenChange={(open) => { if (!open) setEditingTask(null); }}
+        clients={placeholderClients}
+        teamMembers={placeholderTeam}
+        defaultClientId={clientId}
+        task={editingTask}
+        onSubmit={(updated) => {
+          if (editingTask) {
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === editingTask.id
+                  ? { ...t, ...updated, assigned_role: updated.assigned_role ?? null, updated_at: new Date().toISOString() }
+                  : t
+              )
+            );
+          }
+          setEditingTask(null);
+        }}
+      />
+
+      <TaskFromTemplateDialog
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        templates={workflowTemplates}
+        onSelect={(step) => {
+          setTemplateDefaults(step);
+          setFormOpen(true);
+        }}
+      />
+
+      {/* Pre-fill the "Add Task" form when a template step was selected */}
+      {templateDefaults && (
+        <TaskForm
+          open={formOpen && !!templateDefaults}
+          onOpenChange={(open) => {
+            setFormOpen(open);
+            if (!open) setTemplateDefaults(null);
+          }}
+          clients={placeholderClients}
+          teamMembers={placeholderTeam}
+          defaultClientId={clientId}
+          defaults={{
+            title: templateDefaults.title,
+            description: templateDefaults.description ?? undefined,
+            priority: templateDefaults.priority,
+            assigned_role: templateDefaults.assigned_role,
+          }}
+          onSubmit={(task) => {
+            const newTask: Task & { clients?: { name: string } | null } = {
+              id: `t${Date.now()}`,
+              ...task,
+              assigned_role: task.assigned_role ?? null,
+              status: "todo",
+              intelligence_id: null,
+              workflow_template_id: null,
+              source: "workflow",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              clients: null,
+            };
+            setTasks((prev) => [newTask, ...prev]);
+            setTemplateDefaults(null);
+          }}
+        />
+      )}
+
+      <WorkflowTemplateForm
+        open={saveAsTemplateOpen}
+        onOpenChange={setSaveAsTemplateOpen}
+        template={{
+          id: "",
+          name: "",
+          description: null,
+          steps: tasks
+            .filter((t) => t.status !== "done")
+            .map((t, i) => ({
+              title: t.title,
+              description: t.description,
+              assigned_role: t.assigned_role ?? "onboarding",
+              priority: t.priority,
+              due_in_days: 0,
+              order: i + 1,
+            })),
+          created_at: "",
+          updated_at: "",
+        }}
+        onSubmit={(data) => {
+          const newTemplate = {
+            id: `wf-${Date.now()}`,
+            name: data.name,
+            description: data.description || null,
+            steps: data.steps,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          setWorkflowTemplates((prev) => [newTemplate, ...prev]);
         }}
       />
     </div>

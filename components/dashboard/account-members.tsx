@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +61,35 @@ export function AccountMembers({ clientId }: { clientId: string }) {
     return teamMembers.find((tm) => tm.id === teamMemberId)?.name ?? "Unknown";
   }
 
+  function handleToggleRole(accountMemberId: string) {
+    const member = members.find((m) => m.id === accountMemberId);
+    if (!member) return;
+
+    // Don't demote the last owner
+    if (member.role === "owner") {
+      const ownerCount = members.filter((m) => m.role === "owner").length;
+      if (ownerCount <= 1) return;
+    }
+
+    const newRole = member.role === "owner" ? "member" : "owner";
+    setAccountMembers((prev) =>
+      prev.map((am) =>
+        am.id === accountMemberId ? { ...am, role: newRole as AccountRole } : am
+      )
+    );
+  }
+
+  function handleAddAll() {
+    const newMembers = availableToAdd.map((tm) => ({
+      id: `am-${Date.now()}-${tm.id}`,
+      client_id: clientId,
+      team_member_id: tm.id,
+      role: "member" as AccountRole,
+      created_at: new Date().toISOString(),
+    }));
+    setAccountMembers((prev) => [...prev, ...newMembers]);
+  }
+
   function getMemberRole(teamMemberId: string) {
     return teamMembers.find((tm) => tm.id === teamMemberId)?.role ?? "";
   }
@@ -71,9 +101,14 @@ export function AccountMembers({ clientId }: { clientId: string }) {
           {members.length} team {members.length === 1 ? "member" : "members"} have access
         </p>
         {availableToAdd.length > 0 && !addingMember && (
-          <Button size="sm" onClick={() => setAddingMember(true)}>
-            Add Member
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handleAddAll}>
+              Add All
+            </Button>
+            <Button size="sm" onClick={() => setAddingMember(true)}>
+              Add Member
+            </Button>
+          </div>
         )}
       </div>
 
@@ -136,11 +171,15 @@ export function AccountMembers({ clientId }: { clientId: string }) {
                   <div className="flex items-center gap-2">
                     <Badge
                       variant="secondary"
-                      className={
+                      className={cn(
                         am.role === "owner"
                           ? "bg-blue-100 text-blue-800"
-                          : "bg-gray-100 text-gray-700"
-                      }
+                          : "bg-gray-100 text-gray-700",
+                        isLastOwner
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer hover:opacity-80"
+                      )}
+                      onClick={() => handleToggleRole(am.id)}
                     >
                       {am.role === "owner" ? "Owner" : "Member"}
                     </Badge>

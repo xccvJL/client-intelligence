@@ -48,11 +48,13 @@ const placeholderAlerts = [
 ];
 
 export default function DashboardPage() {
-  const { getAccessibleClientIds } = useTeamContext();
+  const { getAccessibleClientIds, showAllAccounts } = useTeamContext();
   const accessibleIds = getAccessibleClientIds();
 
-  // Filter to only accounts the current user can access
-  const myClients = placeholderClients.filter((c) => accessibleIds.includes(c.id));
+  // Filter to only accounts the current user can access (or all when toggle is on)
+  const myClients = placeholderClients.filter((c) =>
+    showAllAccounts || accessibleIds.includes(c.id)
+  );
   const totalEntries = myClients.reduce((sum, c) => sum + c.entries, 0);
   const atRiskCount = myClients.filter((c) => c.health === "at_risk").length;
 
@@ -203,47 +205,59 @@ export default function DashboardPage() {
       <div>
         <h2 className="text-lg font-semibold mb-3">Accounts</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {myClients.map((client) => (
-            <Link key={client.id} href={`/dashboard/accounts/${client.id}`}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">{client.name}</CardTitle>
-                      <CardDescription>{client.domain}</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Badge
-                        variant="secondary"
-                        className={
-                          client.status === "active"
-                            ? "bg-green-100 text-green-700 text-xs"
-                            : "bg-gray-100 text-gray-500 text-xs"
-                        }
-                      >
-                        {client.status === "active" ? "Active" : "Archived"}
-                      </Badge>
-                      <HealthBadge status={client.health} />
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      {client.entries} entries
+          {myClients.map((client) => {
+            const hasAccess = accessibleIds.includes(client.id);
+            return (
+              <Link
+                key={client.id}
+                href={`/dashboard/accounts/${client.id}`}
+                className={!hasAccess ? "opacity-50" : undefined}
+              >
+                <Card className="hover:shadow-md transition-shadow cursor-pointer relative">
+                  {!hasAccess && (
+                    <span className="absolute top-2 right-2 z-10 text-xs bg-muted text-muted-foreground rounded px-1.5 py-0.5">
+                      No access
                     </span>
-                    <div className="flex gap-1">
-                      {client.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="text-xs">
-                          {tag}
+                  )}
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-lg">{client.name}</CardTitle>
+                        <CardDescription>{client.domain}</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            client.status === "active"
+                              ? "bg-green-100 text-green-700 text-xs"
+                              : "bg-gray-100 text-gray-500 text-xs"
+                          }
+                        >
+                          {client.status === "active" ? "Active" : "Archived"}
                         </Badge>
-                      ))}
+                        <HealthBadge status={client.health} />
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">
+                        {client.entries} entries
+                      </span>
+                      <div className="flex gap-1">
+                        {client.tags.map((tag) => (
+                          <Badge key={tag} variant="outline" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       </div>
 

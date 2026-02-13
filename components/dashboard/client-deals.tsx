@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DealCard } from "./deal-card";
 import { DealForm } from "./deal-form";
+import { DealDetailDialog } from "./deal-detail-dialog";
 import type { Deal, DealStage, Client } from "@/lib/types";
 
 // Shows deals for a specific client inside the client detail page.
@@ -25,6 +26,8 @@ const placeholderDeals: (Deal & { clients?: { name: string } | null })[] = [
 export function ClientDeals({ clientId }: ClientDealsProps) {
   const [deals, setDeals] = useState(placeholderDeals);
   const [formOpen, setFormOpen] = useState(false);
+  const [detailDeal, setDetailDeal] = useState<(Deal & { clients?: { name: string } | null }) | null>(null);
+  const [editingDeal, setEditingDeal] = useState<(Deal & { clients?: { name: string } | null }) | null>(null);
 
   function handleStageChange(dealId: string, newStage: DealStage) {
     setDeals((prev) =>
@@ -54,6 +57,7 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
               key={deal.id}
               deal={deal}
               onStageChange={handleStageChange}
+              onClick={(d) => setDetailDeal(d)}
             />
           ))
         )}
@@ -77,6 +81,38 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
             clients: null,
           };
           setDeals((prev) => [newDeal, ...prev]);
+        }}
+      />
+
+      {detailDeal && (
+        <DealDetailDialog
+          open={!!detailDeal}
+          onOpenChange={(open) => { if (!open) setDetailDeal(null); }}
+          deal={detailDeal}
+          onEdit={() => {
+            setEditingDeal(detailDeal);
+            setDetailDeal(null);
+          }}
+        />
+      )}
+
+      <DealForm
+        open={!!editingDeal}
+        onOpenChange={(open) => { if (!open) setEditingDeal(null); }}
+        clients={placeholderClients}
+        defaultClientId={clientId}
+        deal={editingDeal}
+        onSubmit={(updated) => {
+          if (editingDeal) {
+            setDeals((prev) =>
+              prev.map((d) =>
+                d.id === editingDeal.id
+                  ? { ...d, ...updated, notes: updated.notes || null, close_date: updated.close_date || null, updated_at: new Date().toISOString() }
+                  : d
+              )
+            );
+          }
+          setEditingDeal(null);
         }}
       />
     </div>

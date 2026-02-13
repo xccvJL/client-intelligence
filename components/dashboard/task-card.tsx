@@ -26,9 +26,10 @@ interface TaskCardProps {
   assigneeName?: string;
   workflowName?: string;
   onToggleStatus?: (taskId: string, done: boolean) => void;
+  onClick?: (task: Task & { clients?: { name: string } | null }) => void;
 }
 
-export function TaskCard({ task, assigneeName, workflowName, onToggleStatus }: TaskCardProps) {
+export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onClick }: TaskCardProps) {
   const isDone = task.status === "done";
   const priority = priorityConfig[task.priority];
 
@@ -50,12 +51,16 @@ export function TaskCard({ task, assigneeName, workflowName, onToggleStatus }: T
       : undefined;
 
   return (
-    <div className="flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-muted/50">
+    <div
+      className={`flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-muted/50 ${onClick ? "cursor-pointer" : ""}`}
+      onClick={() => onClick?.(task)}
+    >
       <Checkbox
         checked={isDone}
         onCheckedChange={(checked) =>
           onToggleStatus?.(task.id, checked === true)
         }
+        onClick={(e) => e.stopPropagation()}
       />
 
       <div className="flex-1 min-w-0">

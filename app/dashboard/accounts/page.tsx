@@ -59,7 +59,7 @@ export default function AccountsPage() {
   const [deals, setDeals] = useState(placeholderDeals);
   const [formOpen, setFormOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
-  const { getAccessibleClientIds } = useTeamContext();
+  const { getAccessibleClientIds, showAllAccounts } = useTeamContext();
 
   // Only show accounts (and their deals) that the current user has access to
   const accessibleIds = getAccessibleClientIds();
@@ -77,13 +77,15 @@ export default function AccountsPage() {
 
   // Filter accounts by access + status
   const filteredAccounts = placeholderClients.filter((c) => {
-    if (!accessibleIds.includes(c.id)) return false;
+    if (!showAllAccounts && !accessibleIds.includes(c.id)) return false;
     if (statusFilter === "all") return true;
     return c.status === statusFilter;
   });
 
-  // Only include deals for accessible accounts
-  const accessibleDeals = deals.filter((d) => accessibleIds.includes(d.client_id));
+  // Include deals for accessible accounts (or all when toggle is on)
+  const accessibleDeals = deals.filter((d) =>
+    showAllAccounts || accessibleIds.includes(d.client_id)
+  );
 
   // Pipeline value = sum of all non-closed-lost accessible deals
   const pipelineValue = accessibleDeals
@@ -135,22 +137,31 @@ export default function AccountsPage() {
               const activeDealValue = accountDeals
                 .filter((d) => d.stage !== "closed_lost")
                 .reduce((sum, d) => sum + (d.amount ?? 0), 0);
+              const hasAccess = accessibleIds.includes(account.id);
 
               return (
                 <Link
                   key={account.id}
                   href={`/dashboard/accounts/${account.id}`}
+                  className={!hasAccess ? "opacity-50" : undefined}
                 >
-                  <AccountCard
-                    name={account.name}
-                    domain={account.domain}
-                    status={account.status}
-                    healthStatus={account.health}
-                    dealStages={activeDealStages}
-                    dealValue={activeDealValue}
-                    taskCount={taskCounts[account.id] ?? 0}
-                    intelligenceCount={intelligenceCounts[account.id] ?? 0}
-                  />
+                  <div className="relative">
+                    {!hasAccess && (
+                      <span className="absolute top-2 right-2 z-10 text-xs bg-muted text-muted-foreground rounded px-1.5 py-0.5">
+                        No access
+                      </span>
+                    )}
+                    <AccountCard
+                      name={account.name}
+                      domain={account.domain}
+                      status={account.status}
+                      healthStatus={account.health}
+                      dealStages={activeDealStages}
+                      dealValue={activeDealValue}
+                      taskCount={taskCounts[account.id] ?? 0}
+                      intelligenceCount={intelligenceCounts[account.id] ?? 0}
+                    />
+                  </div>
                 </Link>
               );
             })}
