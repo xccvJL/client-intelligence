@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect } from "react";
-import type { TeamMember, AccountMember, WorkflowTemplate } from "@/lib/types";
+import type { TeamMember, AccountMember, WorkflowTemplate, AccountBrief } from "@/lib/types";
 
 // This context holds the "current user" — the team member who is
 // currently using the app. Since there's no login yet, we simulate
@@ -44,6 +44,49 @@ const defaultTemplates: WorkflowTemplate[] = [
   },
 ];
 
+// Pre-built Acme Corp account brief with realistic entries from existing intelligence
+const defaultAccountBriefs: AccountBrief[] = [
+  {
+    client_id: "1",
+    client_name: "Acme Corp",
+    sections: [
+      {
+        type: "key_context",
+        entries: [
+          { content: "Q2 renewal confirmed; expanded scope for next fiscal year", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
+          { content: "Client expressed satisfaction with recent deliverables and timeline", source_label: "Email — Feb 3, 2026", intelligence_id: "3" },
+        ],
+      },
+      {
+        type: "decisions",
+        entries: [
+          { content: "Moving forward with expanded scope; SOW update in progress", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
+        ],
+      },
+      {
+        type: "budgets",
+        entries: [
+          { content: "$120K retainer + $80K expansion budget for next fiscal year", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
+        ],
+      },
+      {
+        type: "key_people",
+        entries: [
+          { content: "Jane Smith — VP of Operations, primary decision-maker", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
+          { content: "Bob Johnson — Project Manager, flagged capacity concerns", source_label: "Transcript — Feb 7, 2026", intelligence_id: "2" },
+        ],
+      },
+      {
+        type: "risks",
+        entries: [
+          { content: "Team capacity concerns flagged during weekly sync", source_label: "Transcript — Feb 7, 2026", intelligence_id: "2" },
+        ],
+      },
+    ],
+    updated_at: "2026-02-10T00:00:00Z",
+  },
+];
+
 interface TeamContextValue {
   currentUser: TeamMember | null;
   setCurrentUser: (member: TeamMember) => void;
@@ -54,6 +97,8 @@ interface TeamContextValue {
   setShowAllAccounts: (show: boolean) => void;
   workflowTemplates: WorkflowTemplate[];
   setWorkflowTemplates: React.Dispatch<React.SetStateAction<WorkflowTemplate[]>>;
+  accountBriefs: AccountBrief[];
+  setAccountBriefs: React.Dispatch<React.SetStateAction<AccountBrief[]>>;
   // Helper: returns the client IDs this user can access
   getAccessibleClientIds: (teamMemberId?: string) => string[];
 }
@@ -66,6 +111,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [accountMembers, setAccountMembers] = useState<AccountMember[]>(placeholderAccountMembers);
   const [showAllAccounts, setShowAllAccounts] = useState(false);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>(defaultTemplates);
+  const [accountBriefs, setAccountBriefs] = useState<AccountBrief[]>(defaultAccountBriefs);
 
   // Default to the first team member on mount
   useEffect(() => {
@@ -94,6 +140,8 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
         setShowAllAccounts,
         workflowTemplates,
         setWorkflowTemplates,
+        accountBriefs,
+        setAccountBriefs,
         getAccessibleClientIds,
       }}
     >

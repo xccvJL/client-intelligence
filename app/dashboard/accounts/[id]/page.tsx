@@ -15,6 +15,7 @@ import { ClientDeals } from "@/components/dashboard/client-deals";
 import { ClientHealthTab } from "@/components/dashboard/client-health";
 import { ClientApplyWorkflowButton } from "@/components/dashboard/client-apply-workflow-button";
 import { AccountMembers } from "@/components/dashboard/account-members";
+import { AccountBrief } from "@/components/dashboard/account-brief";
 
 // Account detail page — shows account info, intelligence timeline, contacts,
 // deals, tasks, health, and per-account knowledge source overrides.
@@ -107,6 +108,7 @@ export default async function AccountDetailPage({
       <Tabs defaultValue="intelligence">
         <TabsList>
           <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
+          <TabsTrigger value="brief">Brief</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="deals">Deals</TabsTrigger>
           <TabsTrigger value="tasks">Tasks</TabsTrigger>
@@ -166,6 +168,10 @@ export default async function AccountDetailPage({
               </CardContent>
             </Card>
           ))}
+        </TabsContent>
+
+        <TabsContent value="brief" className="mt-4">
+          <AccountBrief clientId={id} />
         </TabsContent>
 
         <TabsContent value="sources" className="mt-4">

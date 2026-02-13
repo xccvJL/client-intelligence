@@ -280,3 +280,27 @@ export interface PaginatedResponse<T> {
   page: number;
   per_page: number;
 }
+
+// ===========================================
+// Account Brief — living knowledge document per account
+// ===========================================
+
+export type BriefSectionType = "key_context" | "decisions" | "budgets" | "key_people" | "risks";
+
+export interface BriefEntry {
+  content: string;
+  source_label: string;                // human-readable attribution, e.g. "Email — Feb 10"
+  intelligence_id: string | null;      // nullable link back to the source intelligence entry
+}
+
+export interface BriefSection {
+  type: BriefSectionType;
+  entries: BriefEntry[];
+}
+
+export interface AccountBrief {
+  client_id: string;
+  client_name: string;                 // used for the Markdown export header
+  sections: BriefSection[];
+  updated_at: string;
+}
