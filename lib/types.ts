@@ -266,6 +266,28 @@ export interface ProcessResult {
 }
 
 // ===========================================
+// Lead form webhook — incoming form submissions
+// ===========================================
+
+// Shape of the JSON body sent by external forms to our webhook endpoint.
+export interface LeadFormPayload {
+  name: string;       // contact person's full name (required)
+  email: string;      // contact email address (required)
+  company: string;    // company / business name (required)
+  phone?: string;     // phone number (optional)
+  message?: string;   // free-text message from the form (optional)
+}
+
+// What gets stored in the dashboard after a lead is created.
+// Bundles the new client, the new deal, and a timestamp so the UI
+// can display the lead immediately without a page reload.
+export interface IncomingLead {
+  client: Client;
+  deal: Deal & { clients?: { name: string } | null };
+  received_at: string; // ISO timestamp
+}
+
+// ===========================================
 // API response wrappers
 // ===========================================
 
@@ -303,4 +325,44 @@ export interface AccountBrief {
   client_name: string;                 // used for the Markdown export header
   sections: BriefSection[];
   updated_at: string;
+}
+
+// ===========================================
+// AI-native feature types
+// ===========================================
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+export interface PrepBrief {
+  summary: string;
+  recent_highlights: string[];
+  open_risks: string[];
+  key_topics: string[];
+  talking_points: string[];
+}
+
+export interface DraftResponse {
+  subject: string;
+  body: string;
+  tone: string;
+}
+
+export interface LeadEnrichment {
+  industry: string;
+  company_size: string;
+  likely_needs: string[];
+  suggested_approach: string;
+}
+
+export interface Nudge {
+  id: string;
+  message: string;
+  account_name: string;
+  account_id: string;
+  priority: "high" | "medium" | "low";
+  category: string;
 }

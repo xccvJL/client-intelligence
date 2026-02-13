@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -16,6 +15,9 @@ import { ClientHealthTab } from "@/components/dashboard/client-health";
 import { ClientApplyWorkflowButton } from "@/components/dashboard/client-apply-workflow-button";
 import { AccountMembers } from "@/components/dashboard/account-members";
 import { AccountBrief } from "@/components/dashboard/account-brief";
+import { AccountChat } from "@/components/dashboard/account-chat";
+import { MeetingPrep } from "@/components/dashboard/meeting-prep";
+import { ClientIntelligence } from "@/components/dashboard/client-intelligence";
 
 // Account detail page — shows account info, intelligence timeline, contacts,
 // deals, tasks, health, and per-account knowledge source overrides.
@@ -60,6 +62,28 @@ const placeholderIntelligence = [
   },
 ];
 
+// Placeholder Intelligence objects for the AI features (matching the real type shape).
+// These stand in until real DB data is wired up.
+const placeholderIntelligenceForAI = placeholderIntelligence.map((item) => ({
+  id: item.id,
+  client_id: null,
+  source: item.source as "gmail" | "google_drive" | "manual_note",
+  source_id: "",
+  knowledge_source_id: "",
+  summary: item.summary,
+  key_points: item.topics,
+  sentiment: item.sentiment as "positive" | "neutral" | "negative" | "mixed",
+  action_items: item.actionItems.map((a) => ({
+    description: a,
+    assignee: null,
+    due_date: null,
+  })),
+  people_mentioned: [],
+  topics: item.topics,
+  raw_ai_response: {},
+  created_at: item.date,
+}));
+
 export default async function AccountDetailPage({
   params,
 }: {
@@ -92,6 +116,11 @@ export default async function AccountDetailPage({
           <p className="text-muted-foreground">{placeholderClient.domain}</p>
         </div>
         <div className="flex items-center gap-3">
+          <MeetingPrep
+            clientId={id}
+            clientName={placeholderClient.name}
+            intelligence={placeholderIntelligenceForAI}
+          />
           <ClientApplyWorkflowButton clientId={id} />
           <div className="flex gap-1">
             {placeholderClient.tags.map((tag) => (
@@ -108,6 +137,7 @@ export default async function AccountDetailPage({
       <Tabs defaultValue="intelligence">
         <TabsList>
           <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
+          <TabsTrigger value="ask-ai">Ask AI</TabsTrigger>
           <TabsTrigger value="brief">Brief</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="deals">Deals</TabsTrigger>
@@ -122,52 +152,19 @@ export default async function AccountDetailPage({
             {placeholderIntelligence.length} entries (Account ID: {id})
           </p>
 
-          {placeholderIntelligence.map((item) => (
-            <Card key={item.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle className="text-base">{item.summary}</CardTitle>
-                    <CardDescription>
-                      {item.source === "email" ? "Email" : "Transcript"} &middot;{" "}
-                      {item.date}
-                    </CardDescription>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className={
-                      item.sentiment === "positive"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-gray-100 text-gray-800"
-                    }
-                  >
-                    {item.sentiment}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-1.5 mb-2">
-                  {item.topics.map((topic) => (
-                    <Badge key={topic} variant="outline" className="text-xs">
-                      {topic}
-                    </Badge>
-                  ))}
-                </div>
-                {item.actionItems.length > 0 && (
-                  <div className="mt-2 text-sm">
-                    <p className="font-medium text-muted-foreground mb-1">
-                      Action Items:
-                    </p>
-                    <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                      {item.actionItems.map((action, i) => (
-                        <li key={i}>{action}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+          <ClientIntelligence
+            clientId={id}
+            clientName={placeholderClient.name}
+            entries={placeholderIntelligence}
+            intelligence={placeholderIntelligenceForAI}
+          />
+        </TabsContent>
+
+        <TabsContent value="ask-ai" className="mt-4">
+          <AccountChat
+            clientId={id}
+            intelligence={placeholderIntelligenceForAI}
+          />
         </TabsContent>
 
         <TabsContent value="brief" className="mt-4">

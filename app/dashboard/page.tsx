@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HealthBadge } from "@/components/dashboard/health-badge";
+import { NudgesPanel } from "@/components/dashboard/nudges-panel";
 import { useTeamContext } from "@/components/dashboard/team-context";
 import type { HealthStatus, DealStage, AccountStatus } from "@/lib/types";
 
@@ -169,6 +170,9 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* AI Nudges — proactive action suggestions */}
+      <NudgesPanel />
+
       {/* Alerts */}
       {placeholderAlerts.length > 0 && (
         <Card>
@@ -230,8 +234,8 @@ export default function DashboardPage() {
                           variant="secondary"
                           className={
                             client.status === "active"
-                              ? "bg-green-100 text-green-700 text-xs"
-                              : "bg-gray-100 text-gray-500 text-xs"
+                              ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 text-xs"
+                              : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 text-xs"
                           }
                         >
                           {client.status === "active" ? "Active" : "Archived"}
@@ -288,10 +292,10 @@ export default function DashboardPage() {
                     variant="secondary"
                     className={
                       item.sentiment === "positive"
-                        ? "bg-green-100 text-green-800"
+                        ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
                         : item.sentiment === "mixed"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-gray-100 text-gray-800"
+                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300"
+                          : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
                     }
                   >
                     {item.sentiment}
