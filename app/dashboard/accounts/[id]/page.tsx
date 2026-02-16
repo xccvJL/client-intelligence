@@ -97,7 +97,7 @@ export default async function AccountDetailPage({
   return (
     <div className="space-y-6">
       {/* Header with breadcrumb */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Link
@@ -118,14 +118,14 @@ export default async function AccountDetailPage({
           <h1 className="text-2xl font-bold">{placeholderClient.name}</h1>
           <p className="text-muted-foreground">{placeholderClient.domain}</p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <MeetingPrep
             clientId={id}
             clientName={placeholderClient.name}
             intelligence={placeholderIntelligenceForAI}
           />
           <ClientApplyWorkflowButton clientId={id} />
-          <div className="flex gap-1">
+          <div className="flex gap-1 ml-1">
             {placeholderClient.tags.map((tag) => (
               <Badge key={tag} variant="outline">
                 {tag}
