@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -11,7 +12,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { HealthBadge } from "@/components/dashboard/health-badge";
 import { NudgesPanel } from "@/components/dashboard/nudges-panel";
+import { DashboardBriefing } from "@/components/dashboard/dashboard-briefing";
+import { ActivityLog } from "@/components/dashboard/activity-log";
 import { useTeamContext } from "@/components/dashboard/team-context";
+import { mockActivityLog } from "@/lib/mock-activity";
 import type { HealthStatus, DealStage, AccountStatus } from "@/lib/types";
 
 // Main dashboard — shows stats, account grid, pipeline snapshot,
@@ -59,6 +63,27 @@ export default function DashboardPage() {
   const totalEntries = myClients.reduce((sum, c) => sum + c.entries, 0);
   const atRiskCount = myClients.filter((c) => c.health === "at_risk").length;
 
+  // Build a plain-text summary of dashboard state for the AI briefing
+  const briefingSummary = useMemo(() => {
+    const accountLines = myClients
+      .map((c) => `- ${c.name} (ID: ${c.id}): health=${c.health}, ${c.entries} intelligence entries, tags=${c.tags.join(", ")}`)
+      .join("\n");
+
+    const taskLines = placeholderUrgentTasks
+      .map((t) => `- ${t.title} (${t.client}, priority=${t.priority}, due=${t.due})`)
+      .join("\n");
+
+    const alertLines = placeholderAlerts
+      .map((a) => `- ${a.message} (${a.client}, severity=${a.severity})`)
+      .join("\n");
+
+    const pipeline = Object.entries(placeholderPipelineCounts)
+      .map(([stage, count]) => `${stage}: ${count}`)
+      .join(", ");
+
+    return `ACCOUNTS:\n${accountLines}\n\nURGENT TASKS:\n${taskLines}\n\nHEALTH ALERTS:\n${alertLines}\n\nPIPELINE: ${pipeline}\nTotal pipeline value: $315k\nUpcoming renewals: 2`;
+  }, [myClients]);
+
   return (
     <div className="space-y-8">
       <div>
@@ -67,6 +92,9 @@ export default function DashboardPage() {
           Account overview and recent intelligence
         </p>
       </div>
+
+      {/* AI Daily Briefing — prioritized items for today */}
+      <DashboardBriefing summaryText={briefingSummary} />
 
       {/* Stats row — expanded to 6 cards, filtered by access */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -265,7 +293,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent activity */}
+      {/* Recent activity — powered by the activity log system */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Recent Activity</h2>
@@ -276,35 +304,7 @@ export default function DashboardPage() {
             View all
           </Link>
         </div>
-        <div className="space-y-3">
-          {placeholderActivity.map((item) => (
-            <Card key={item.id}>
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-base">{item.summary}</CardTitle>
-                    <CardDescription>
-                      {item.client} &middot;{" "}
-                      {item.source === "email" ? "Email" : "Transcript"}
-                    </CardDescription>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className={
-                      item.sentiment === "positive"
-                        ? "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
-                        : item.sentiment === "mixed"
-                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300"
-                          : "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
-                    }
-                  >
-                    {item.sentiment}
-                  </Badge>
-                </div>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
+        <ActivityLog entries={mockActivityLog} initialCount={6} />
       </div>
     </div>
   );

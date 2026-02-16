@@ -7,6 +7,8 @@ import type {
   DraftResponse,
   LeadEnrichment,
   Nudge,
+  GeneratedAccountBriefResponse,
+  DashboardBriefingItem,
 } from "./types";
 
 // Initialize the Gemini client
@@ -335,4 +337,86 @@ Return 3-8 nudges, prioritized by urgency.`;
 
   const result = await model.generateContent(prompt);
   return parseJsonResponse(result.response.text(), nudgesSchema) ?? [];
+}
+
+// 6. Account brief generation — categorise intelligence into the 5 brief sections
+const accountBriefSchema = z.object({
+  key_context: z.array(z.string()),
+  decisions: z.array(z.string()),
+  budgets: z.array(z.string()),
+  key_people: z.array(z.string()),
+  risks: z.array(z.string()),
+});
+
+export async function generateAccountBrief(
+  intelligence: Intelligence[],
+  clientName: string
+): Promise<GeneratedAccountBriefResponse | null> {
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const context = formatIntelligenceContext(intelligence);
+
+  const prompt = `You are building an account brief for ${clientName}.
+Based on the intelligence data below, categorize the insights into exactly 5 sections.
+Extract concrete, specific facts — not vague summaries.
+
+Return ONLY valid JSON matching this exact shape:
+{
+  "key_context": ["important background facts about the account"],
+  "decisions": ["decisions that have been made or need to be made"],
+  "budgets": ["budget-related information, spend, costs, pricing"],
+  "key_people": ["names and roles of important stakeholders"],
+  "risks": ["risks, concerns, or red flags"]
+}
+
+Each array should contain 0-5 items. If there is no relevant information for a section, return an empty array.
+
+ACCOUNT DATA:
+${context}`;
+
+  const result = await model.generateContent(prompt);
+  return parseJsonResponse(result.response.text(), accountBriefSchema);
+}
+
+// 7. Dashboard briefing — identify the 3-5 most important things to focus on today
+const dashboardBriefingSchema = z.array(
+  z.object({
+    title: z.string(),
+    description: z.string(),
+    priority: z.enum(["high", "medium", "low"]),
+    category: z.string(),
+    account_name: z.string(),
+    account_id: z.string(),
+  })
+);
+
+export async function generateDashboardBriefing(
+  summaryText: string
+): Promise<DashboardBriefingItem[]> {
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const prompt = `You are a proactive account management assistant. Review the current state of the business below
+and identify the 3-5 most important things the user should focus on TODAY. Prioritize by urgency
+and business impact. Think about overdue tasks, at-risk accounts, stalled deals, upcoming renewals,
+and recent negative signals.
+
+CURRENT STATE:
+${summaryText}
+
+Return ONLY a valid JSON array where each item matches this shape:
+{
+  "title": "short action-oriented title (max 10 words)",
+  "description": "1-2 sentence explanation of why this matters and what to do",
+  "priority": "high" | "medium" | "low",
+  "category": "one of: task, health, deal, renewal, follow-up",
+  "account_name": "name of the related account",
+  "account_id": "id of the related account"
+}
+
+Return 3-5 items, ordered by priority (highest first).`;
+
+  const result = await model.generateContent(prompt);
+  return parseJsonResponse(result.response.text(), dashboardBriefingSchema) ?? [];
 }

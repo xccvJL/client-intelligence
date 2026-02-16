@@ -18,9 +18,12 @@ import { AccountBrief } from "@/components/dashboard/account-brief";
 import { AccountChat } from "@/components/dashboard/account-chat";
 import { MeetingPrep } from "@/components/dashboard/meeting-prep";
 import { ClientIntelligence } from "@/components/dashboard/client-intelligence";
+import { ClientTimeline } from "@/components/dashboard/client-timeline";
+import { StakeholderView } from "@/components/dashboard/stakeholder-view";
+import { CalendarPreview } from "@/components/dashboard/calendar-preview";
 
 // Account detail page — shows account info, intelligence timeline, contacts,
-// deals, tasks, health, and per-account knowledge source overrides.
+// deals, tasks, health, timeline, stakeholders, and per-account knowledge source overrides.
 
 const placeholderClient = {
   name: "Acme Corp",
@@ -94,7 +97,7 @@ export default async function AccountDetailPage({
   return (
     <div className="space-y-6">
       {/* Header with breadcrumb */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <Link
@@ -115,7 +118,7 @@ export default async function AccountDetailPage({
           <h1 className="text-2xl font-bold">{placeholderClient.name}</h1>
           <p className="text-muted-foreground">{placeholderClient.domain}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <MeetingPrep
             clientId={id}
             clientName={placeholderClient.name}
@@ -135,17 +138,22 @@ export default async function AccountDetailPage({
       <Separator />
 
       <Tabs defaultValue="intelligence">
-        <TabsList>
-          <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
-          <TabsTrigger value="ask-ai">Ask AI</TabsTrigger>
-          <TabsTrigger value="brief">Brief</TabsTrigger>
-          <TabsTrigger value="sources">Sources</TabsTrigger>
-          <TabsTrigger value="deals">Deals</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks</TabsTrigger>
-          <TabsTrigger value="health">Health</TabsTrigger>
-          <TabsTrigger value="team">Team</TabsTrigger>
-          <TabsTrigger value="contacts">Contacts</TabsTrigger>
-        </TabsList>
+        {/* Horizontally scrollable tab bar for mobile and desktop with many tabs */}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="inline-flex w-max min-w-full">
+            <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="ask-ai">Ask AI</TabsTrigger>
+            <TabsTrigger value="brief">Brief</TabsTrigger>
+            <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
+            <TabsTrigger value="sources">Sources</TabsTrigger>
+            <TabsTrigger value="deals">Deals</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="health">Health</TabsTrigger>
+            <TabsTrigger value="team">Team</TabsTrigger>
+            <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="intelligence" className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
@@ -160,6 +168,10 @@ export default async function AccountDetailPage({
           />
         </TabsContent>
 
+        <TabsContent value="timeline" className="mt-4">
+          <ClientTimeline clientId={id} />
+        </TabsContent>
+
         <TabsContent value="ask-ai" className="mt-4">
           <AccountChat
             clientId={id}
@@ -168,7 +180,11 @@ export default async function AccountDetailPage({
         </TabsContent>
 
         <TabsContent value="brief" className="mt-4">
-          <AccountBrief clientId={id} />
+          <AccountBrief clientId={id} clientName={placeholderClient.name} intelligence={placeholderIntelligenceForAI} />
+        </TabsContent>
+
+        <TabsContent value="stakeholders" className="mt-4">
+          <StakeholderView clientId={id} />
         </TabsContent>
 
         <TabsContent value="sources" className="mt-4">
@@ -183,8 +199,10 @@ export default async function AccountDetailPage({
           <ClientTasks clientId={id} />
         </TabsContent>
 
-        <TabsContent value="health" className="mt-4">
+        <TabsContent value="health" className="space-y-6 mt-4">
           <ClientHealthTab clientId={id} />
+          {/* Upcoming events for this account */}
+          <CalendarPreview accountId={id} />
         </TabsContent>
 
         <TabsContent value="team" className="mt-4">

@@ -366,3 +366,261 @@ export interface Nudge {
   priority: "high" | "medium" | "low";
   category: string;
 }
+
+// ===========================================
+// AI-generated account brief — raw AI output before converting to BriefEntry[]
+// ===========================================
+
+export interface GeneratedAccountBriefResponse {
+  key_context: string[];
+  decisions: string[];
+  budgets: string[];
+  key_people: string[];
+  risks: string[];
+}
+
+// ===========================================
+// Dashboard briefing — prioritized daily focus items
+// ===========================================
+
+export interface DashboardBriefingItem {
+  title: string;
+  description: string;
+  priority: "high" | "medium" | "low";
+  category: string;
+  account_name: string;
+  account_id: string;
+}
+
+// ===========================================
+// Activity Logging — tracks "who did what and when"
+// ===========================================
+
+export type ActivityEventType =
+  | "account_created"
+  | "account_archived"
+  | "account_restored"
+  | "deal_created"
+  | "deal_stage_changed"
+  | "deal_won"
+  | "deal_lost"
+  | "task_created"
+  | "task_completed"
+  | "task_reassigned"
+  | "note_added"
+  | "email_synced"
+  | "meeting_logged"
+  | "health_changed"
+  | "contact_added"
+  | "workflow_applied"
+  | "intelligence_received"
+  | "brief_updated";
+
+export interface ActivityLogEntry {
+  id: string;
+  event_type: ActivityEventType;
+  description: string;
+  actor_name: string;
+  account_name: string | null;
+  account_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+// ===========================================
+// Global Search — Cmd+K search across everything
+// ===========================================
+
+export type SearchResultType = "account" | "deal" | "task" | "contact" | "intelligence";
+
+export interface SearchResult {
+  id: string;
+  type: SearchResultType;
+  title: string;
+  subtitle: string;
+  href: string;
+}
+
+// ===========================================
+// Notifications & Reminders
+// ===========================================
+
+export type NotificationType =
+  | "overdue_task"
+  | "health_drop"
+  | "deal_stagnant"
+  | "upcoming_renewal"
+  | "new_intelligence"
+  | "mention"
+  | "workflow_complete";
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  account_name: string | null;
+  account_id: string | null;
+  read: boolean;
+  created_at: string;
+}
+
+export interface NotificationPreferences {
+  overdue_task: boolean;
+  health_drop: boolean;
+  deal_stagnant: boolean;
+  upcoming_renewal: boolean;
+  new_intelligence: boolean;
+  mention: boolean;
+  workflow_complete: boolean;
+}
+
+// ===========================================
+// Email / Calendar Sync UI
+// ===========================================
+
+export interface Integration {
+  id: string;
+  name: string;
+  provider: string;
+  status: "connected" | "disconnected" | "syncing" | "error";
+  last_synced_at: string | null;
+  icon: string;
+}
+
+export interface SyncedEmail {
+  id: string;
+  subject: string;
+  from: string;
+  to: string[];
+  snippet: string;
+  date: string;
+  matched_account_id: string | null;
+  matched_account_name: string | null;
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  attendees: string[];
+  matched_account_id: string | null;
+  matched_account_name: string | null;
+  location: string | null;
+}
+
+// ===========================================
+// Client Timeline — unified chronological view
+// ===========================================
+
+export type TimelineEventType =
+  | "email"
+  | "deal_change"
+  | "task_completed"
+  | "health_change"
+  | "note"
+  | "meeting"
+  | "intelligence"
+  | "contact_added"
+  | "workflow";
+
+export interface TimelineEvent {
+  id: string;
+  type: TimelineEventType;
+  title: string;
+  description: string;
+  sentiment: Sentiment | null;
+  actor_name: string | null;
+  created_at: string;
+}
+
+// ===========================================
+// Stakeholder / Relationship Map
+// ===========================================
+
+export type StakeholderRole = "decision_maker" | "champion" | "blocker" | "influencer" | "end_user";
+
+export interface StakeholderTouchpoint {
+  id: string;
+  type: "email" | "meeting" | "call" | "note";
+  summary: string;
+  date: string;
+  team_member_name: string;
+}
+
+export interface Stakeholder {
+  id: string;
+  account_id: string;
+  name: string;
+  job_title: string;
+  email: string;
+  role: StakeholderRole;
+  last_interaction_date: string | null;
+  touchpoints: StakeholderTouchpoint[];
+}
+
+// ===========================================
+// Dashboard Analytics & Reporting
+// ===========================================
+
+export interface PipelineVelocityPoint {
+  month: string;
+  lead: number;
+  proposal: number;
+  active: number;
+  closed_won: number;
+}
+
+export interface WinRatePoint {
+  month: string;
+  rate: number;
+  deals_won: number;
+  deals_lost: number;
+}
+
+export interface HealthTrendPoint {
+  month: string;
+  healthy: number;
+  at_risk: number;
+  churning: number;
+}
+
+export interface TeamWorkloadPoint {
+  member_name: string;
+  todo: number;
+  in_progress: number;
+  done: number;
+}
+
+// ===========================================
+// Automation Rules + Bulk Actions
+// ===========================================
+
+export type AutomationTrigger =
+  | "deal_stage_changed"
+  | "task_overdue"
+  | "health_dropped"
+  | "new_account_created"
+  | "renewal_approaching"
+  | "no_contact_7_days";
+
+export type AutomationAction =
+  | "create_task"
+  | "send_notification"
+  | "apply_workflow"
+  | "change_health_status"
+  | "assign_team_member"
+  | "add_tag";
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  description: string;
+  trigger: AutomationTrigger;
+  trigger_config: Record<string, unknown>;
+  action: AutomationAction;
+  action_config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+}

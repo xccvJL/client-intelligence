@@ -21,7 +21,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useTeamContext } from "@/components/dashboard/team-context";
-import type { BriefSectionType, BriefSection, BriefEntry, AccountBrief as AccountBriefType } from "@/lib/types";
+import type { BriefSectionType, BriefSection, BriefEntry, AccountBrief as AccountBriefType, Intelligence, GeneratedAccountBriefResponse } from "@/lib/types";
 
 // Human-readable labels for each section type
 const sectionLabels: Record<BriefSectionType, string> = {
@@ -162,7 +162,13 @@ interface EditTarget {
   entryIndex: number;
 }
 
-export function AccountBrief({ clientId }: { clientId: string }) {
+interface AccountBriefProps {
+  clientId: string;
+  clientName?: string;
+  intelligence?: Intelligence[];
+}
+
+export function AccountBrief({ clientId, clientName, intelligence }: AccountBriefProps) {
   const { accountBriefs, setAccountBriefs } = useTeamContext();
 
   // Add-entry dialog state
@@ -179,6 +185,12 @@ export function AccountBrief({ clientId }: { clientId: string }) {
 
   // Feedback states for copy / PDF buttons
   const [copied, setCopied] = useState(false);
+
+  // AI generation state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState<GeneratedAccountBriefResponse | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Find the brief for this account (may be undefined for accounts without one yet)
   const brief = accountBriefs.find((b) => b.client_id === clientId);
@@ -308,6 +320,73 @@ export function AccountBrief({ clientId }: { clientId: string }) {
     setEditDialogOpen(false);
   }
 
+  // ---------- AI generation ----------
+
+  async function handleAiGenerate() {
+    if (!intelligence || intelligence.length === 0) return;
+
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}/generate-brief`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intelligence,
+          clientName: clientName ?? `Account ${clientId}`,
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok) {
+        setAiError(json.error ?? "Failed to generate brief");
+        return;
+      }
+
+      setAiResult(json.data);
+      setAiDialogOpen(true);
+    } catch {
+      setAiError("Failed to reach the AI. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function handleApplyAiResult() {
+    if (!aiResult) return;
+
+    const aiEntries: Record<BriefSectionType, string[]> = {
+      key_context: aiResult.key_context,
+      decisions: aiResult.decisions,
+      budgets: aiResult.budgets,
+      key_people: aiResult.key_people,
+      risks: aiResult.risks,
+    };
+
+    updateBrief((b) => ({
+      ...b,
+      sections: b.sections.map((s) => {
+        const newItems = aiEntries[s.type] ?? [];
+        if (newItems.length === 0) return s;
+        return {
+          ...s,
+          entries: [
+            ...s.entries,
+            ...newItems.map((content) => ({
+              content,
+              source_label: "AI-generated",
+              intelligence_id: null,
+            })),
+          ],
+        };
+      }),
+    }));
+
+    setAiResult(null);
+    setAiDialogOpen(false);
+  }
+
   // ---------- render ----------
 
   return (
@@ -333,6 +412,17 @@ export function AccountBrief({ clientId }: { clientId: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {intelligence && intelligence.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAiGenerate}
+              disabled={aiLoading}
+            >
+              {aiLoading ? "Generating..." : "Auto-generate with AI"}
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -407,6 +497,51 @@ export function AccountBrief({ clientId }: { clientId: string }) {
           </Dialog>
         </div>
       </div>
+
+      {/* AI error message */}
+      {aiError && (
+        <p className="text-sm text-destructive">{aiError}</p>
+      )}
+
+      {/* AI confirmation dialog */}
+      <Dialog open={aiDialogOpen} onOpenChange={setAiDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>AI-Generated Brief Entries</DialogTitle>
+          </DialogHeader>
+          {aiResult && (
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Review the entries below. Click &quot;Apply&quot; to merge them into your existing brief (your manual entries will be preserved).
+              </p>
+              {sectionOrder.map((type) => {
+                const items = aiResult[type] ?? [];
+                if (items.length === 0) return null;
+                return (
+                  <div key={type}>
+                    <h4 className="text-sm font-medium mb-1">{sectionLabels[type]}</h4>
+                    <ul className="space-y-1">
+                      {items.map((item, i) => (
+                        <li key={i} className="text-sm text-muted-foreground pl-3 border-l-2 border-muted">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+              <div className="flex gap-2 pt-2">
+                <Button onClick={handleApplyAiResult} className="flex-1">
+                  Apply
+                </Button>
+                <Button variant="outline" onClick={() => setAiDialogOpen(false)} className="flex-1">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Entry dialog (controlled, not trigger-based) */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
