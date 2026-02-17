@@ -169,7 +169,7 @@ interface AccountBriefProps {
 }
 
 export function AccountBrief({ clientId, clientName, intelligence }: AccountBriefProps) {
-  const { accountBriefs, setAccountBriefs } = useTeamContext();
+  const { accountBriefs, setAccountBriefs, getPrompt } = useTeamContext();
 
   // Add-entry dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -335,6 +335,7 @@ export function AccountBrief({ clientId, clientName, intelligence }: AccountBrie
         body: JSON.stringify({
           intelligence,
           clientName: clientName ?? `Account ${clientId}`,
+          systemPrompt: getPrompt("account_brief"),
         }),
       });
       const json = await res.json();

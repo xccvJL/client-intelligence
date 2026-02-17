@@ -10,10 +10,11 @@ export async function POST(
   await params;
 
   try {
-    const { intelligence, entryId, clientName } = (await request.json()) as {
+    const { intelligence, entryId, clientName, systemPrompt } = (await request.json()) as {
       intelligence: Intelligence[];
       entryId: string;
       clientName: string;
+      systemPrompt?: string;
     };
 
     if (!entryId || !clientName) {
@@ -26,7 +27,8 @@ export async function POST(
     const draft = await generateDraftResponse(
       intelligence ?? [],
       entryId,
-      clientName
+      clientName,
+      systemPrompt
     );
 
     if (!draft) {

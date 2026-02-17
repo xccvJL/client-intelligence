@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { ChatMessage, Intelligence } from "@/lib/types";
 
 interface AccountChatProps {
@@ -12,6 +13,7 @@ interface AccountChatProps {
 }
 
 export function AccountChat({ clientId, intelligence }: AccountChatProps) {
+  const { getPrompt } = useTeamContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,7 +45,7 @@ export function AccountChat({ clientId, intelligence }: AccountChatProps) {
       const res = await fetch(`/api/clients/${clientId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, intelligence }),
+        body: JSON.stringify({ question, intelligence, systemPrompt: getPrompt("account_qa") }),
       });
 
       const json = await res.json();

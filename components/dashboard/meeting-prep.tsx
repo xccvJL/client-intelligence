@@ -9,6 +9,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { PrepBrief, Intelligence } from "@/lib/types";
 
 interface MeetingPrepProps {
@@ -22,6 +23,7 @@ export function MeetingPrep({
   clientName,
   intelligence,
 }: MeetingPrepProps) {
+  const { getPrompt } = useTeamContext();
   const [brief, setBrief] = useState<PrepBrief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function MeetingPrep({
       const res = await fetch(`/api/clients/${clientId}/prep-brief`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intelligence, clientName }),
+        body: JSON.stringify({ intelligence, clientName, systemPrompt: getPrompt("meeting_prep") }),
       });
 
       const json = await res.json();

@@ -4,8 +4,9 @@ import { generateDashboardBriefing } from "@/lib/gemini";
 // POST /api/dashboard-briefing — generate a prioritized daily briefing
 export async function POST(request: NextRequest) {
   try {
-    const { summaryText } = (await request.json()) as {
+    const { summaryText, systemPrompt } = (await request.json()) as {
       summaryText: string;
+      systemPrompt?: string;
     };
 
     if (!summaryText) {
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const items = await generateDashboardBriefing(summaryText);
+    const items = await generateDashboardBriefing(summaryText, systemPrompt);
 
     return NextResponse.json({ data: items });
   } catch (err) {

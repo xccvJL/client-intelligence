@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { DashboardBriefingItem } from "@/lib/types";
 
 const priorityColors: Record<string, string> = {
@@ -23,6 +24,7 @@ interface DashboardBriefingProps {
 }
 
 export function DashboardBriefing({ summaryText }: DashboardBriefingProps) {
+  const { getPrompt } = useTeamContext();
   const [items, setItems] = useState<DashboardBriefingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function DashboardBriefing({ summaryText }: DashboardBriefingProps) {
       const res = await fetch("/api/dashboard-briefing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ summaryText }),
+        body: JSON.stringify({ summaryText, systemPrompt: getPrompt("dashboard_briefing") }),
       });
       const json = await res.json();
 

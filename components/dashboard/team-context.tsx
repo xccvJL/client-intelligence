@@ -1,11 +1,14 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
-import type { TeamMember, AccountMember, WorkflowTemplate, AccountBrief } from "@/lib/types";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import type { TeamMember, AccountMember, WorkflowTemplate, AccountBrief, IncomingLead, Notification } from "@/lib/types";
+import { mockNotifications } from "@/lib/mock-notifications";
+import { defaultPromptsMap } from "@/lib/default-prompts";
 
 // This context holds the "current user" — the team member who is
 // currently using the app. Since there's no login yet, we simulate
 // it with a dropdown in the sidebar.
+// Also holds shared state for notifications (so the bell count stays in sync).
 
 // Placeholder team members (same ones used across the app).
 const placeholderTeamMembers: TeamMember[] = [
@@ -99,6 +102,17 @@ interface TeamContextValue {
   setWorkflowTemplates: React.Dispatch<React.SetStateAction<WorkflowTemplate[]>>;
   accountBriefs: AccountBrief[];
   setAccountBriefs: React.Dispatch<React.SetStateAction<AccountBrief[]>>;
+  // Incoming leads from the webhook test form (appears in Accounts + Pipeline immediately)
+  incomingLeads: IncomingLead[];
+  addIncomingLead: (lead: IncomingLead) => void;
+  // Notifications state — shared so the bell count stays in sync across components
+  notifications: Notification[];
+  setNotifications: React.Dispatch<React.SetStateAction<Notification[]>>;
+  // AI system prompts — only stores overrides; empty object = all defaults
+  systemPrompts: Record<string, string>;
+  setSystemPrompts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  // Returns the custom prompt if one exists, otherwise the default
+  getPrompt: (key: string) => string;
   // Helper: returns the client IDs this user can access
   getAccessibleClientIds: (teamMemberId?: string) => string[];
 }
@@ -112,6 +126,38 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [showAllAccounts, setShowAllAccounts] = useState(false);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>(defaultTemplates);
   const [accountBriefs, setAccountBriefs] = useState<AccountBrief[]>(defaultAccountBriefs);
+  const [incomingLeads, setIncomingLeads] = useState<IncomingLead[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [systemPrompts, setSystemPrompts] = useState<Record<string, string>>({});
+
+  // Returns the custom prompt for a key, or falls back to the built-in default
+  const getPrompt = useCallback(
+    (key: string): string => {
+      if (systemPrompts[key]) return systemPrompts[key];
+      return defaultPromptsMap[key]?.defaultPrompt ?? "";
+    },
+    [systemPrompts]
+  );
+
+  // Add a new lead from the webhook test form.
+  // Prepends to the list and also grants the current user access to the new account.
+  function addIncomingLead(lead: IncomingLead) {
+    setIncomingLeads((prev) => [lead, ...prev]);
+
+    // Give the current user access so the new account shows up in their filtered views
+    if (currentUser) {
+      setAccountMembers((prev) => [
+        ...prev,
+        {
+          id: `am-lead-${lead.client.id}`,
+          client_id: lead.client.id,
+          team_member_id: currentUser.id,
+          role: "owner" as const,
+          created_at: lead.received_at,
+        },
+      ]);
+    }
+  }
 
   // Default to the first team member on mount
   useEffect(() => {
@@ -142,6 +188,13 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
         setWorkflowTemplates,
         accountBriefs,
         setAccountBriefs,
+        incomingLeads,
+        addIncomingLead,
+        notifications,
+        setNotifications,
+        systemPrompts,
+        setSystemPrompts,
+        getPrompt,
         getAccessibleClientIds,
       }}
     >

@@ -10,9 +10,10 @@ export async function POST(
   await params;
 
   try {
-    const { intelligence, clientName } = (await request.json()) as {
+    const { intelligence, clientName, systemPrompt } = (await request.json()) as {
       intelligence: Intelligence[];
       clientName: string;
+      systemPrompt?: string;
     };
 
     if (!clientName) {
@@ -22,7 +23,7 @@ export async function POST(
       );
     }
 
-    const brief = await generateAccountBrief(intelligence ?? [], clientName);
+    const brief = await generateAccountBrief(intelligence ?? [], clientName, systemPrompt);
 
     if (!brief) {
       return NextResponse.json(

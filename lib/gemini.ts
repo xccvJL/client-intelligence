@@ -41,9 +41,10 @@ const intelligenceSchema = z.object({
 // Prompt templates — these tell Gemini exactly what to extract and how
 // to format the response.
 
-const EMAIL_PROMPT = `You are an intelligence analyst for a professional services firm.
-Analyze the following email and extract structured intelligence.
+// Default editable instructions — can be overridden via the systemPrompt parameter
+const EMAIL_INSTRUCTION = `You are an intelligence analyst for a professional services firm. Analyze the following email and extract structured intelligence.`;
 
+const EMAIL_FORMAT = `
 Return ONLY valid JSON matching this exact shape:
 {
   "summary": "2-3 sentence summary of the email",
@@ -58,9 +59,9 @@ Return ONLY valid JSON matching this exact shape:
 EMAIL:
 `;
 
-const TRANSCRIPT_PROMPT = `You are an intelligence analyst for a professional services firm.
-Analyze the following meeting transcript and extract structured intelligence.
+const TRANSCRIPT_INSTRUCTION = `You are an intelligence analyst for a professional services firm. Analyze the following meeting transcript and extract structured intelligence.`;
 
+const TRANSCRIPT_FORMAT = `
 Return ONLY valid JSON matching this exact shape:
 {
   "summary": "2-3 sentence summary of the meeting",
@@ -94,24 +95,30 @@ export function parseGeminiResponse(
 
 // Send an email to Gemini and get structured intelligence back
 export async function extractEmailIntelligence(
-  emailContent: string
+  emailContent: string,
+  systemPrompt?: string
 ): Promise<GeminiIntelligenceResponse | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const result = await model.generateContent(EMAIL_PROMPT + emailContent);
+  const instruction = systemPrompt ?? EMAIL_INSTRUCTION;
+  const prompt = `${instruction}${EMAIL_FORMAT}${emailContent}`;
+  const result = await model.generateContent(prompt);
   const text = result.response.text();
   return parseGeminiResponse(text);
 }
 
 // Send a meeting transcript to Gemini and get structured intelligence back
 export async function extractTranscriptIntelligence(
-  transcriptContent: string
+  transcriptContent: string,
+  systemPrompt?: string
 ): Promise<GeminiIntelligenceResponse | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const result = await model.generateContent(TRANSCRIPT_PROMPT + transcriptContent);
+  const instruction = systemPrompt ?? TRANSCRIPT_INSTRUCTION;
+  const prompt = `${instruction}${TRANSCRIPT_FORMAT}${transcriptContent}`;
+  const result = await model.generateContent(prompt);
   const text = result.response.text();
   return parseGeminiResponse(text);
 }
@@ -150,15 +157,18 @@ function formatIntelligenceContext(intelligence: Intelligence[]): string {
 // 1. Account Q&A — answer a question using intelligence entries as context
 export async function chatWithAccountContext(
   intelligence: Intelligence[],
-  question: string
+  question: string,
+  systemPrompt?: string
 ): Promise<string> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   const context = formatIntelligenceContext(intelligence);
 
-  const prompt = `You are an account intelligence assistant for a professional services firm.
-Use ONLY the account data below to answer the user's question. If the data doesn't contain enough information, say so honestly.
+  const instruction = systemPrompt ?? `You are an account intelligence assistant for a professional services firm.
+Use ONLY the account data below to answer the user's question. If the data doesn't contain enough information, say so honestly.`;
+
+  const prompt = `${instruction}
 
 ACCOUNT DATA:
 ${context}
@@ -182,15 +192,18 @@ const prepBriefSchema = z.object({
 
 export async function generatePrepBrief(
   intelligence: Intelligence[],
-  clientName: string
+  clientName: string,
+  systemPrompt?: string
 ): Promise<PrepBrief | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   const context = formatIntelligenceContext(intelligence);
 
-  const prompt = `You are preparing a meeting brief for an upcoming call with ${clientName}.
-Based on the intelligence data below, create a structured brief.
+  const instruction = systemPrompt ?? `You are preparing a meeting brief for an upcoming call with ${clientName}.
+Based on the intelligence data below, create a structured brief.`;
+
+  const prompt = `${instruction}
 
 Return ONLY valid JSON matching this exact shape:
 {
@@ -218,7 +231,8 @@ const draftResponseSchema = z.object({
 export async function generateDraftResponse(
   intelligence: Intelligence[],
   entryId: string,
-  clientName: string
+  clientName: string,
+  systemPrompt?: string
 ): Promise<DraftResponse | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -228,7 +242,9 @@ export async function generateDraftResponse(
 
   const context = formatIntelligenceContext(intelligence);
 
-  const prompt = `You are drafting an email response for a professional services firm.
+  const instruction = systemPrompt ?? `You are drafting an email response for a professional services firm.`;
+
+  const prompt = `${instruction}
 
 The specific email/entry to respond to:
 Summary: ${entry.summary}
@@ -259,14 +275,17 @@ const leadEnrichmentSchema = z.object({
 
 export async function enrichLead(
   companyName: string,
-  domain: string
+  domain: string,
+  systemPrompt?: string
 ): Promise<LeadEnrichment | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const prompt = `You are a sales intelligence analyst. Based on the company name and domain below,
+  const instruction = systemPrompt ?? `You are a sales intelligence analyst. Based on the company name and domain below,
 provide your best assessment of the company. Use your training knowledge — do not make up specifics
-you aren't reasonably confident about.
+you aren't reasonably confident about.`;
+
+  const prompt = `${instruction}
 
 Company: ${companyName}
 Domain: ${domain}
@@ -304,7 +323,8 @@ const nudgesSchema = z.array(
 );
 
 export async function generateNudges(
-  accountSummaries: AccountSummary[]
+  accountSummaries: AccountSummary[],
+  systemPrompt?: string
 ): Promise<Nudge[]> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -316,9 +336,11 @@ export async function generateNudges(
     )
     .join("\n");
 
-  const prompt = `You are a proactive account manager assistant. Review the accounts below and suggest
+  const instruction = systemPrompt ?? `You are a proactive account manager assistant. Review the accounts below and suggest
 actionable nudges — things the team should do soon. Focus on accounts that haven't been contacted
-recently, are at-risk, have stalled deals, or need follow-up.
+recently, are at-risk, have stalled deals, or need follow-up.`;
+
+  const prompt = `${instruction}
 
 ACCOUNTS:
 ${summaryText}
@@ -350,16 +372,19 @@ const accountBriefSchema = z.object({
 
 export async function generateAccountBrief(
   intelligence: Intelligence[],
-  clientName: string
+  clientName: string,
+  systemPrompt?: string
 ): Promise<GeneratedAccountBriefResponse | null> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   const context = formatIntelligenceContext(intelligence);
 
-  const prompt = `You are building an account brief for ${clientName}.
+  const instruction = systemPrompt ?? `You are building an account brief for ${clientName}.
 Based on the intelligence data below, categorize the insights into exactly 5 sections.
-Extract concrete, specific facts — not vague summaries.
+Extract concrete, specific facts — not vague summaries.`;
+
+  const prompt = `${instruction}
 
 Return ONLY valid JSON matching this exact shape:
 {
@@ -392,15 +417,18 @@ const dashboardBriefingSchema = z.array(
 );
 
 export async function generateDashboardBriefing(
-  summaryText: string
+  summaryText: string,
+  systemPrompt?: string
 ): Promise<DashboardBriefingItem[]> {
   const client = getGeminiClient();
   const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-  const prompt = `You are a proactive account management assistant. Review the current state of the business below
+  const instruction = systemPrompt ?? `You are a proactive account management assistant. Review the current state of the business below
 and identify the 3-5 most important things the user should focus on TODAY. Prioritize by urgency
 and business impact. Think about overdue tasks, at-risk accounts, stalled deals, upcoming renewals,
-and recent negative signals.
+and recent negative signals.`;
+
+  const prompt = `${instruction}
 
 CURRENT STATE:
 ${summaryText}

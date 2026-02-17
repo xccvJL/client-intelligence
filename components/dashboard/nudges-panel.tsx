@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { Nudge } from "@/lib/types";
 
 const priorityColors: Record<string, string> = {
@@ -19,6 +20,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export function NudgesPanel() {
+  const { getPrompt } = useTeamContext();
   const [nudges, setNudges] = useState<Nudge[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -30,7 +32,11 @@ export function NudgesPanel() {
     setDismissed(new Set());
 
     try {
-      const res = await fetch("/api/nudges");
+      const res = await fetch("/api/nudges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt: getPrompt("nudges") }),
+      });
       const json = await res.json();
 
       if (!res.ok) {

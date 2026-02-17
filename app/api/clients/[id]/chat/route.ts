@@ -12,9 +12,10 @@ export async function POST(
   await params; // acknowledge the route param
 
   try {
-    const { question, intelligence } = (await request.json()) as {
+    const { question, intelligence, systemPrompt } = (await request.json()) as {
       question: string;
       intelligence: Intelligence[];
+      systemPrompt?: string;
     };
 
     if (!question) {
@@ -24,7 +25,7 @@ export async function POST(
       );
     }
 
-    const answer = await chatWithAccountContext(intelligence ?? [], question);
+    const answer = await chatWithAccountContext(intelligence ?? [], question, systemPrompt);
 
     return NextResponse.json({ data: { answer } });
   } catch (err) {
