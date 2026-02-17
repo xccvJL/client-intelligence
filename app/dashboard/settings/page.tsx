@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -21,12 +21,29 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useTeamContext } from "@/components/dashboard/team-context";
 import { IntegrationsPanel } from "@/components/dashboard/integrations-panel";
 import { EmailPreview } from "@/components/dashboard/email-preview";
 import { CalendarPreview } from "@/components/dashboard/calendar-preview";
 import { NotificationPreferencesPanel } from "@/components/dashboard/notification-preferences";
-import { defaultPrompts, defaultPromptsMap } from "@/lib/default-prompts";
+import { defaultPrompts, promptGroupLabels } from "@/lib/default-prompts";
 import type { SourceType, Client, Deal, IncomingLead } from "@/lib/types";
 
 // Settings page — manage knowledge sources, clients, and integrations.
@@ -108,10 +125,26 @@ function formatLastSynced(timestamp: string | null): string {
 
 export default function SettingsPage() {
   const [sources, setSources] = useState(initialSources);
-  const { addIncomingLead, currentUser, systemPrompts, setSystemPrompts, getPrompt } = useTeamContext();
+  const { addIncomingLead, currentUser, systemPrompts, setSystemPrompts } = useTeamContext();
 
   // Local editing state for AI prompts — tracks in-progress edits before saving
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
+  // Tracks which prompts just showed "Saved" confirmation
+  const [savedFeedback, setSavedFeedback] = useState<Record<string, boolean>>({});
+  // Tracks which prompts are showing the default comparison
+  const [showOriginal, setShowOriginal] = useState<Record<string, boolean>>({});
+
+  // Briefly flash "Saved" next to a prompt's Save button, then hide after 2 seconds
+  const flashSaved = useCallback((key: string) => {
+    setSavedFeedback((prev) => ({ ...prev, [key]: true }));
+    setTimeout(() => {
+      setSavedFeedback((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }, 2000);
+  }, []);
 
   // --- Lead Capture Webhook state ---
   const [webhookApiKey, setWebhookApiKey] = useState("");
@@ -347,125 +380,217 @@ export default function SettingsPage() {
 
       <Separator />
 
-      {/* AI System Prompts */}
+      {/* AI Behavior */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>AI System Prompts</CardTitle>
+              <CardTitle>AI Behavior</CardTitle>
               <CardDescription>
-                Customize the instructions given to the AI for each feature.
-                These control the AI&apos;s role and behavior &mdash; the output
-                format and data injection are handled automatically and
-                can&apos;t be changed here.
+                Control how each AI feature thinks and responds. Edit the
+                instructions below to change the AI&apos;s tone, focus, or
+                approach.
               </CardDescription>
             </div>
             {Object.keys(systemPrompts).length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setSystemPrompts({});
-                  setPromptEdits({});
-                }}
-              >
-                Reset All to Defaults
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Reset All
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reset all prompts?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will restore all AI features to their original
+                      instructions. Any customizations will be lost.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        setSystemPrompts({});
+                        setPromptEdits({});
+                        setShowOriginal({});
+                      }}
+                    >
+                      Reset All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {defaultPrompts.map((def) => {
-            // What the textarea currently shows: local edit > saved custom > default
-            const currentValue =
-              promptEdits[def.key] ??
-              systemPrompts[def.key] ??
-              def.defaultPrompt;
-            const isCustomized = def.key in systemPrompts;
-            const hasUnsavedEdit =
-              def.key in promptEdits &&
-              promptEdits[def.key] !== (systemPrompts[def.key] ?? def.defaultPrompt);
-
+        <CardContent className="space-y-6">
+          {(["everyday", "advanced"] as const).map((group) => {
+            const groupPrompts = defaultPrompts.filter(
+              (p) => p.group === group
+            );
             return (
-              <div key={def.key} className="rounded-md border p-4 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold">{def.label}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {def.description}
-                  </p>
-                </div>
+              <div key={group}>
+                <h3 className="text-sm font-semibold mb-2">
+                  {promptGroupLabels[group]}
+                </h3>
+                <Accordion type="single" collapsible className="border rounded-md">
+                  {groupPrompts.map((def) => {
+                    const currentValue =
+                      promptEdits[def.key] ??
+                      systemPrompts[def.key] ??
+                      def.defaultPrompt;
+                    const isCustomized = def.key in systemPrompts;
+                    const hasUnsavedEdit =
+                      def.key in promptEdits &&
+                      promptEdits[def.key] !==
+                        (systemPrompts[def.key] ?? def.defaultPrompt);
 
-                <Textarea
-                  className="font-mono text-xs min-h-[100px]"
-                  value={currentValue}
-                  onChange={(e) =>
-                    setPromptEdits((prev) => ({
-                      ...prev,
-                      [def.key]: e.target.value,
-                    }))
-                  }
-                  rows={4}
-                />
+                    return (
+                      <AccordionItem key={def.key} value={def.key} className="px-4">
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{def.label}</span>
+                            <span className="text-muted-foreground font-normal">
+                              {def.description}
+                            </span>
+                            {isCustomized && (
+                              <Badge variant="secondary" className="text-xs ml-1">
+                                Customized
+                              </Badge>
+                            )}
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-3">
+                          <Textarea
+                            className="text-sm min-h-[100px]"
+                            value={currentValue}
+                            onChange={(e) =>
+                              setPromptEdits((prev) => ({
+                                ...prev,
+                                [def.key]: e.target.value,
+                              }))
+                            }
+                            rows={4}
+                          />
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    disabled={!hasUnsavedEdit}
-                    onClick={() => {
-                      const value = promptEdits[def.key];
-                      // If the edit matches the default, remove the override instead
-                      if (value === def.defaultPrompt) {
-                        setSystemPrompts((prev) => {
-                          const next = { ...prev };
-                          delete next[def.key];
-                          return next;
-                        });
-                      } else {
-                        setSystemPrompts((prev) => ({
-                          ...prev,
-                          [def.key]: value,
-                        }));
-                      }
-                      // Clear the local edit
-                      setPromptEdits((prev) => {
-                        const next = { ...prev };
-                        delete next[def.key];
-                        return next;
-                      });
-                    }}
-                  >
-                    Save
-                  </Button>
+                          {/* Hint */}
+                          <p className="text-xs text-muted-foreground">
+                            {def.hint}
+                          </p>
 
-                  {isCustomized && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        // Remove the saved override
-                        setSystemPrompts((prev) => {
-                          const next = { ...prev };
-                          delete next[def.key];
-                          return next;
-                        });
-                        // Clear any in-progress edit
-                        setPromptEdits((prev) => {
-                          const next = { ...prev };
-                          delete next[def.key];
-                          return next;
-                        });
-                      }}
-                    >
-                      Reset to Default
-                    </Button>
-                  )}
+                          {/* Show Original comparison */}
+                          {isCustomized && showOriginal[def.key] && (
+                            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground whitespace-pre-wrap">
+                              {def.defaultPrompt}
+                            </div>
+                          )}
 
-                  {isCustomized && (
-                    <Badge variant="secondary" className="text-xs">
-                      Customized
-                    </Badge>
-                  )}
-                </div>
+                          {/* Button row */}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              disabled={!hasUnsavedEdit}
+                              onClick={() => {
+                                const value = promptEdits[def.key];
+                                if (value === def.defaultPrompt) {
+                                  setSystemPrompts((prev) => {
+                                    const next = { ...prev };
+                                    delete next[def.key];
+                                    return next;
+                                  });
+                                } else {
+                                  setSystemPrompts((prev) => ({
+                                    ...prev,
+                                    [def.key]: value,
+                                  }));
+                                }
+                                setPromptEdits((prev) => {
+                                  const next = { ...prev };
+                                  delete next[def.key];
+                                  return next;
+                                });
+                                flashSaved(def.key);
+                              }}
+                            >
+                              Save
+                            </Button>
+
+                            {savedFeedback[def.key] && (
+                              <span className="text-sm text-green-600">
+                                Saved
+                              </span>
+                            )}
+
+                            {isCustomized && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setShowOriginal((prev) => ({
+                                    ...prev,
+                                    [def.key]: !prev[def.key],
+                                  }))
+                                }
+                              >
+                                {showOriginal[def.key]
+                                  ? "Hide Original"
+                                  : "Show Original"}
+                              </Button>
+                            )}
+
+                            {isCustomized && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    Restore Original
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Restore original?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will replace your custom instructions
+                                      for {def.label} with the original.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => {
+                                        setSystemPrompts((prev) => {
+                                          const next = { ...prev };
+                                          delete next[def.key];
+                                          return next;
+                                        });
+                                        setPromptEdits((prev) => {
+                                          const next = { ...prev };
+                                          delete next[def.key];
+                                          return next;
+                                        });
+                                        setShowOriginal((prev) => {
+                                          const next = { ...prev };
+                                          delete next[def.key];
+                                          return next;
+                                        });
+                                      }}
+                                    >
+                                      Restore
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
               </div>
             );
           })}
