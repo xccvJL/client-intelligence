@@ -9,6 +9,7 @@ import type {
   Nudge,
   GeneratedAccountBriefResponse,
   DashboardBriefingItem,
+  HealthStatus,
 } from "./types";
 
 // Initialize the Gemini client
@@ -447,4 +448,54 @@ Return 3-5 items, ordered by priority (highest first).`;
 
   const result = await model.generateContent(prompt);
   return parseJsonResponse(result.response.text(), dashboardBriefingSchema) ?? [];
+}
+
+// 8. Health summary — generate a plain-text description of the account's health
+interface HealthContext {
+  status: HealthStatus;
+  satisfaction_score: number;
+  renewal_date: string | null;
+  last_positive_signal: string | null;
+  last_negative_signal: string | null;
+  alerts: { severity: string; message: string }[];
+}
+
+export async function generateHealthSummary(
+  intelligence: Intelligence[],
+  clientName: string,
+  healthContext: HealthContext,
+  systemPrompt?: string
+): Promise<string> {
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const intelContext = formatIntelligenceContext(intelligence);
+
+  const alertText = healthContext.alerts.length > 0
+    ? healthContext.alerts.map((a) => `- [${a.severity}] ${a.message}`).join("\n")
+    : "None";
+
+  const instruction = systemPrompt ?? `You are an account health analyst for a professional services firm.
+Write a concise 2-4 sentence summary of this account's current health. Focus on the overall relationship
+status, key risks or strengths, and what needs attention. Be specific and actionable.`;
+
+  const prompt = `${instruction}
+
+ACCOUNT: ${clientName}
+STATUS: ${healthContext.status}
+SATISFACTION SCORE: ${healthContext.satisfaction_score}/10
+RENEWAL DATE: ${healthContext.renewal_date ?? "Not set"}
+LAST POSITIVE SIGNAL: ${healthContext.last_positive_signal ?? "None"}
+LAST NEGATIVE SIGNAL: ${healthContext.last_negative_signal ?? "None"}
+
+ACTIVE ALERTS:
+${alertText}
+
+RECENT INTELLIGENCE:
+${intelContext}
+
+Write a plain-text summary (no JSON, no markdown). Keep it to 2-4 sentences.`;
+
+  const result = await model.generateContent(prompt);
+  return result.response.text().trim();
 }

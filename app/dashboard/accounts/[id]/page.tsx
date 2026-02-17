@@ -1,29 +1,13 @@
 import Link from "next/link";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClientSourceOverrides } from "@/components/dashboard/client-source-overrides";
-import { ClientTasks } from "@/components/dashboard/client-tasks";
-import { ClientDeals } from "@/components/dashboard/client-deals";
-import { ClientHealthTab } from "@/components/dashboard/client-health";
 import { ClientApplyWorkflowButton } from "@/components/dashboard/client-apply-workflow-button";
-import { AccountMembers } from "@/components/dashboard/account-members";
-import { AccountBrief } from "@/components/dashboard/account-brief";
-import { AccountChat } from "@/components/dashboard/account-chat";
 import { MeetingPrep } from "@/components/dashboard/meeting-prep";
-import { ClientIntelligence } from "@/components/dashboard/client-intelligence";
-import { ClientTimeline } from "@/components/dashboard/client-timeline";
-import { StakeholderView } from "@/components/dashboard/stakeholder-view";
-import { CalendarPreview } from "@/components/dashboard/calendar-preview";
+import { AccountDetailTabs } from "@/components/dashboard/account-detail-tabs";
 
-// Account detail page — shows account info, intelligence timeline, contacts,
-// deals, tasks, health, timeline, stakeholders, and per-account knowledge source overrides.
+// Account detail page — shows account info header and the tabbed detail view.
+// The Tabs UI (including tab state and the "More" dropdown) lives in
+// AccountDetailTabs, a client component, so this page stays a server component.
 
 const placeholderClient = {
   name: "Acme Corp",
@@ -66,7 +50,6 @@ const placeholderIntelligence = [
 ];
 
 // Placeholder Intelligence objects for the AI features (matching the real type shape).
-// These stand in until real DB data is wired up.
 const placeholderIntelligenceForAI = placeholderIntelligence.map((item) => ({
   id: item.id,
   client_id: null,
@@ -137,93 +120,12 @@ export default async function AccountDetailPage({
 
       <Separator />
 
-      <Tabs defaultValue="intelligence">
-        {/* Horizontally scrollable tab bar for mobile and desktop with many tabs */}
-        <div className="overflow-x-auto -mx-1 px-1">
-          <TabsList className="inline-flex w-max min-w-full">
-            <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="ask-ai">Ask AI</TabsTrigger>
-            <TabsTrigger value="brief">Brief</TabsTrigger>
-            <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
-            <TabsTrigger value="sources">Sources</TabsTrigger>
-            <TabsTrigger value="deals">Deals</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="health">Health</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="contacts">Contacts</TabsTrigger>
-          </TabsList>
-        </div>
-
-        <TabsContent value="intelligence" className="space-y-4 mt-4">
-          <p className="text-sm text-muted-foreground">
-            {placeholderIntelligence.length} entries (Account ID: {id})
-          </p>
-
-          <ClientIntelligence
-            clientId={id}
-            clientName={placeholderClient.name}
-            entries={placeholderIntelligence}
-            intelligence={placeholderIntelligenceForAI}
-          />
-        </TabsContent>
-
-        <TabsContent value="timeline" className="mt-4">
-          <ClientTimeline clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="ask-ai" className="mt-4">
-          <AccountChat
-            clientId={id}
-            intelligence={placeholderIntelligenceForAI}
-          />
-        </TabsContent>
-
-        <TabsContent value="brief" className="mt-4">
-          <AccountBrief clientId={id} clientName={placeholderClient.name} intelligence={placeholderIntelligenceForAI} />
-        </TabsContent>
-
-        <TabsContent value="stakeholders" className="mt-4">
-          <StakeholderView clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="sources" className="mt-4">
-          <ClientSourceOverrides clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="deals" className="mt-4">
-          <ClientDeals clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="tasks" className="mt-4">
-          <ClientTasks clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="health" className="space-y-6 mt-4">
-          <ClientHealthTab clientId={id} />
-          {/* Upcoming events for this account */}
-          <CalendarPreview accountId={id} />
-        </TabsContent>
-
-        <TabsContent value="team" className="mt-4">
-          <AccountMembers clientId={id} />
-        </TabsContent>
-
-        <TabsContent value="contacts" className="mt-4">
-          <div className="space-y-3">
-            {placeholderClient.contacts.map((contact) => (
-              <Card key={contact.email}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">{contact.name}</CardTitle>
-                  <CardDescription>
-                    {contact.role} &middot; {contact.email}
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+      <AccountDetailTabs
+        clientId={id}
+        clientName={placeholderClient.name}
+        intelligence={placeholderIntelligence}
+        intelligenceForAI={placeholderIntelligenceForAI}
+      />
     </div>
   );
 }

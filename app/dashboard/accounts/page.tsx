@@ -8,8 +8,9 @@ import { Card, CardHeader, CardDescription, CardTitle } from "@/components/ui/ca
 import { AccountCard } from "@/components/dashboard/account-card";
 import { PipelineColumn } from "@/components/dashboard/pipeline-column";
 import { DealForm } from "@/components/dashboard/deal-form";
+import { BulkActionBar } from "@/components/dashboard/bulk-action-bar";
 import { useTeamContext } from "@/components/dashboard/team-context";
-import type { Deal, DealStage, Client, AccountStatus, HealthStatus } from "@/lib/types";
+import type { Deal, DealStage, Client, HealthStatus } from "@/lib/types";
 
 // Accounts page — combines the account list and pipeline kanban into one view.
 // "All Accounts" tab: filterable card grid (All / Active / Archived).
@@ -41,10 +42,6 @@ const placeholderDeals: (Deal & { clients?: { name: string } | null })[] = [
   { id: "d7", client_id: "5", title: "Waystar — Brand Audit", stage: "closed_lost", amount: 50000, close_date: "2026-01-10", notes: null, created_by: null, created_at: "2025-11-01", updated_at: "2026-01-10", clients: { name: "Waystar Royco" } },
 ];
 
-// Placeholder counts per account
-const intelligenceCounts: Record<string, number> = { "1": 12, "2": 8, "3": 5, "4": 3, "5": 2 };
-const taskCounts: Record<string, number> = { "1": 3, "2": 1, "3": 1, "4": 0, "5": 0 };
-
 type StatusFilter = "all" | "active" | "archived";
 
 function formatCurrency(amount: number) {
@@ -56,16 +53,28 @@ function formatCurrency(amount: number) {
 }
 
 export default function AccountsPage() {
-  const [deals, setDeals] = useState(placeholderDeals);
+  const [localDeals, setLocalDeals] = useState(placeholderDeals);
   const [formOpen, setFormOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
-  const { getAccessibleClientIds, showAllAccounts } = useTeamContext();
+  const [selectedDealIds, setSelectedDealIds] = useState<Set<string>>(new Set());
+  const { getAccessibleClientIds, showAllAccounts, incomingLeads } = useTeamContext();
+
+  // Convert incoming leads into the same shape as our placeholder data
+  const leadClients: (Client & { health: HealthStatus })[] = incomingLeads.map((l) => ({
+    ...l.client,
+    health: "healthy" as const,
+  }));
+  const leadDeals: (Deal & { clients?: { name: string } | null })[] = incomingLeads.map((l) => l.deal);
+
+  // Merge placeholder + incoming leads
+  const allClients = [...placeholderClients, ...leadClients];
+  const deals = [...localDeals, ...leadDeals];
 
   // Only show accounts (and their deals) that the current user has access to
   const accessibleIds = getAccessibleClientIds();
 
   function handleStageChange(dealId: string, newStage: DealStage) {
-    setDeals((prev) =>
+    setLocalDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d))
     );
   }
@@ -76,7 +85,7 @@ export default function AccountsPage() {
   }
 
   // Filter accounts by access + status
-  const filteredAccounts = placeholderClients.filter((c) => {
+  const filteredAccounts = allClients.filter((c) => {
     if (!showAllAccounts && !accessibleIds.includes(c.id)) return false;
     if (statusFilter === "all") return true;
     return c.status === statusFilter;
@@ -131,9 +140,6 @@ export default function AccountsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredAccounts.map((account) => {
               const accountDeals = getAccountDeals(account.id);
-              const activeDealStages = accountDeals
-                .filter((d) => d.stage !== "closed_lost")
-                .map((d) => d.stage);
               const activeDealValue = accountDeals
                 .filter((d) => d.stage !== "closed_lost")
                 .reduce((sum, d) => sum + (d.amount ?? 0), 0);
@@ -156,10 +162,7 @@ export default function AccountsPage() {
                       domain={account.domain}
                       status={account.status}
                       healthStatus={account.health}
-                      dealStages={activeDealStages}
                       dealValue={activeDealValue}
-                      taskCount={taskCounts[account.id] ?? 0}
-                      intelligenceCount={intelligenceCounts[account.id] ?? 0}
                     />
                   </div>
                 </Link>
@@ -220,11 +223,33 @@ export default function AccountsPage() {
         </TabsContent>
       </Tabs>
 
+      {/* Bulk action bar for selected deals */}
+      <BulkActionBar
+        selectedCount={selectedDealIds.size}
+        onDelete={() => {
+          setLocalDeals((prev) => prev.filter((d) => !selectedDealIds.has(d.id)));
+          setSelectedDealIds(new Set());
+        }}
+        onClearSelection={() => setSelectedDealIds(new Set())}
+        actions={[
+          {
+            label: "Move to Active",
+            onClick: () => {
+              setLocalDeals((prev) =>
+                prev.map((d) => selectedDealIds.has(d.id) ? { ...d, stage: "active" as DealStage } : d)
+              );
+              setSelectedDealIds(new Set());
+            },
+          },
+        ]}
+      />
+
       <DealForm
         open={formOpen}
         onOpenChange={setFormOpen}
-        clients={placeholderClients}
+        clients={allClients}
         onSubmit={(deal) => {
+          const matchedClient = allClients.find((c) => c.id === deal.client_id);
           const newDeal: Deal & { clients?: { name: string } | null } = {
             id: `d${Date.now()}`,
             ...deal,
@@ -234,11 +259,9 @@ export default function AccountsPage() {
             created_by: null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            clients: placeholderClients.find((c) => c.id === deal.client_id)
-              ? { name: placeholderClients.find((c) => c.id === deal.client_id)!.name }
-              : null,
+            clients: matchedClient ? { name: matchedClient.name } : null,
           };
-          setDeals((prev) => [newDeal, ...prev]);
+          setLocalDeals((prev) => [newDeal, ...prev]);
         }}
       />
     </div>

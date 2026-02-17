@@ -1,13 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { HealthBadge } from "./health-badge";
 import { AlertCard } from "./alert-card";
 import type { ClientHealth, HealthAlert, HealthStatus } from "@/lib/types";
 
 // Panel showing the big-picture health of a client:
 // status badge, satisfaction score, renewal date with countdown,
-// and a list of recent alerts.
+// AI-generated description (editable), and a list of recent alerts.
 
 interface HealthSummaryProps {
   health: ClientHealth;
@@ -15,6 +17,9 @@ interface HealthSummaryProps {
   onAcknowledgeAlert?: (alertId: string) => void;
   onUpdateStatus?: (status: HealthStatus) => void;
   onUpdateScore?: (score: number) => void;
+  onUpdateNotes?: (notes: string) => void;
+  onGenerateDescription?: () => void;
+  isGenerating?: boolean;
 }
 
 export function HealthSummary({
@@ -23,7 +28,12 @@ export function HealthSummary({
   onAcknowledgeAlert,
   onUpdateStatus,
   onUpdateScore,
+  onUpdateNotes,
+  onGenerateDescription,
+  isGenerating,
 }: HealthSummaryProps) {
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
   const renewalCountdown = health.renewal_date
     ? Math.ceil(
         (new Date(health.renewal_date).getTime() - Date.now()) /
@@ -124,6 +134,81 @@ export function HealthSummary({
                   : "None"}
               </p>
             </div>
+          </div>
+
+          {/* Description — AI-generated, manually editable */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium">Description</label>
+              {health.notes && !editing && (
+                <div className="flex gap-1">
+                  {onGenerateDescription && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-6 px-2"
+                      onClick={onGenerateDescription}
+                      disabled={isGenerating}
+                    >
+                      {isGenerating ? "Generating..." : "Regenerate"}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs h-6 px-2"
+                    onClick={() => {
+                      setEditText(health.notes ?? "");
+                      setEditing(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {editing ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditing(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      onUpdateNotes?.(editText);
+                      setEditing(false);
+                    }}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ) : health.notes ? (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {health.notes}
+              </p>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onGenerateDescription}
+                disabled={isGenerating}
+              >
+                {isGenerating ? "Generating..." : "Generate with AI"}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
