@@ -1,9 +1,8 @@
+import { Sidebar } from "@/components/dashboard/sidebar";
 import { TeamProvider } from "@/components/dashboard/team-context";
-import { DashboardShell } from "@/components/dashboard/dashboard-shell";
 
 // Dashboard layout wraps all /dashboard/* pages with the sidebar navigation.
-// DashboardShell handles mobile responsiveness (hamburger menu, overlay sidebar)
-// and the global Cmd+K search shortcut.
+// The sidebar stays visible on every dashboard page.
 // TeamProvider gives every page access to the "current user" selection.
 
 export default function DashboardLayout({
@@ -13,7 +12,10 @@ export default function DashboardLayout({
 }) {
   return (
     <TeamProvider>
-      <DashboardShell>{children}</DashboardShell>
+      <div className="flex min-h-screen">
+        <Sidebar />
+        <main className="flex-1 p-6">{children}</main>
+      </div>
     </TeamProvider>
   );
 }

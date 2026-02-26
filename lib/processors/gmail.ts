@@ -20,7 +20,6 @@ async function processBatch(
   source: KnowledgeSource,
   _clients: Client[]
 ): Promise<ProcessResult> {
-  void _clients;
   const supabase = createServerClient();
   const result: ProcessResult = { processed: 0, errors: 0, error_messages: [] };
 
@@ -32,63 +31,21 @@ async function processBatch(
   const emails = await fetchNewEmails(afterTimestamp);
 
   for (const email of emails) {
-    let queueId: string | null = null;
-
     try {
-      // Idempotency guard: skip if this email was already converted into intelligence.
-      const { data: existingIntel } = await supabase
-        .from("intelligence")
-        .select("id")
-        .eq("source", "gmail")
-        .eq("source_id", email.id)
-        .limit(1)
-        .maybeSingle();
+      // Add to processing queue
+      const queueItem: Partial<ProcessingQueueItem> = {
+        source: "gmail",
+        source_id: email.id,
+        knowledge_source_id: source.id,
+        raw_content: JSON.stringify(email),
+        status: "processing",
+      };
 
-      if (existingIntel) continue;
-
-      // Keep queue state consistent across retries.
-      const { data: existingQueue } = await supabase
+      const { data: queue } = await supabase
         .from("processing_queue")
-        .select("id,status")
-        .eq("source", "gmail")
-        .eq("source_id", email.id)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingQueue?.status === "completed") continue;
-
-      if (existingQueue) {
-        queueId = existingQueue.id as string;
-        await supabase
-          .from("processing_queue")
-          .update({
-            status: "processing",
-            error_message: null,
-            processed_at: null,
-            raw_content: JSON.stringify(email),
-          })
-          .eq("id", queueId);
-      } else {
-        const queueItem: Partial<ProcessingQueueItem> = {
-          source: "gmail",
-          source_id: email.id,
-          knowledge_source_id: source.id,
-          raw_content: JSON.stringify(email),
-          status: "processing",
-        };
-
-        const { data: queue, error: queueError } = await supabase
-          .from("processing_queue")
-          .insert(queueItem)
-          .select("id")
-          .single();
-
-        if (queueError || !queue) {
-          throw queueError ?? new Error("Failed to create queue item");
-        }
-
-        queueId = queue.id as string;
-      }
+        .insert(queueItem)
+        .select()
+        .single();
 
       // Try to match to a client
       const client = await findClientForEmail(email.from);
@@ -97,66 +54,45 @@ async function processBatch(
       const content = `From: ${email.from}\nTo: ${email.to}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`;
       const intelligence = await extractEmailIntelligence(content);
 
-      if (!intelligence) {
-        throw new Error("Gemini returned an invalid response payload");
-      }
+      if (intelligence && queue) {
+        const entry: Partial<Intelligence> = {
+          client_id: client?.id ?? null,
+          source: "gmail",
+          source_id: email.id,
+          knowledge_source_id: source.id,
+          summary: intelligence.summary,
+          key_points: intelligence.key_points,
+          sentiment: intelligence.sentiment,
+          action_items: intelligence.action_items,
+          people_mentioned: intelligence.people_mentioned,
+          topics: intelligence.topics,
+          raw_ai_response: intelligence as unknown as Record<string, unknown>,
+        };
 
-      const entry: Partial<Intelligence> = {
-        client_id: client?.id ?? null,
-        source: "gmail",
-        source_id: email.id,
-        knowledge_source_id: source.id,
-        summary: intelligence.summary,
-        key_points: intelligence.key_points,
-        sentiment: intelligence.sentiment,
-        action_items: intelligence.action_items,
-        people_mentioned: intelligence.people_mentioned,
-        topics: intelligence.topics,
-        raw_ai_response: intelligence as unknown as Record<string, unknown>,
-      };
+        const { data: saved } = await supabase
+          .from("intelligence").insert(entry).select().single();
 
-      const { data: saved, error: saveError } = await supabase
-        .from("intelligence")
-        .insert(entry)
-        .select()
-        .single();
+        if (saved) {
+          await createTasksFromIntelligence(saved as Intelligence);
+          await evaluateHealthSignals(saved as Intelligence);
+        }
 
-      if (saveError) throw saveError;
-      if (!saved) throw new Error("Failed to persist intelligence entry");
-
-      await createTasksFromIntelligence(saved as Intelligence);
-      await evaluateHealthSignals(saved as Intelligence);
-
-      if (queueId) {
         await supabase
           .from("processing_queue")
           .update({
             status: "completed",
             client_id: client?.id ?? null,
             processed_at: new Date().toISOString(),
-            error_message: null,
           })
-          .eq("id", queueId);
-      }
+          .eq("id", queue.id);
 
-      result.processed++;
+        result.processed++;
+      }
     } catch (err) {
       result.errors++;
-      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       result.error_messages.push(
-        `Email ${email.id}: ${errorMessage}`
+        `Email ${email.id}: ${err instanceof Error ? err.message : "Unknown error"}`
       );
-
-      if (queueId) {
-        await supabase
-          .from("processing_queue")
-          .update({
-            status: "failed",
-            error_message: errorMessage,
-            processed_at: new Date().toISOString(),
-          })
-          .eq("id", queueId);
-      }
     }
   }
 

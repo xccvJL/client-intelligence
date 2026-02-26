@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TaskList } from "./task-list";
 import { TaskForm } from "./task-form";
@@ -8,316 +8,48 @@ import { TaskDetailDialog } from "./task-detail-dialog";
 import { TaskFromTemplateDialog } from "./task-from-template-dialog";
 import { WorkflowTemplateForm } from "./workflow-template-form";
 import { useTeamContext } from "./team-context";
-import type { Task, TaskStatus, Client, WorkflowStep, WorkflowTemplate } from "@/lib/types";
+import type { Task, TaskStatus, Client, TeamMember, WorkflowStep } from "@/lib/types";
 
-// Shows tasks for a specific client inside the client detail page.
+// Shows the tasks for a specific client inside the client detail page.
+// Includes inline status toggles and an "Add Task" button.
 
 interface ClientTasksProps {
   clientId: string;
 }
 
-type TaskWithClient = Task & { clients?: { name: string } | null };
+const placeholderTeam: TeamMember[] = [
+  { id: "tm1", name: "Sarah Chen", email: "sarah@thrive.com", role: "account_manager", gmail_watch_label: null, created_at: "" },
+  { id: "tm2", name: "Mike Torres", email: "mike@thrive.com", role: "sales", gmail_watch_label: null, created_at: "" },
+];
+
+const placeholderClients: Client[] = [
+  { id: "1", name: "Acme Corp", domain: "acme.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
+];
+
+const placeholderTasks: (Task & { clients?: { name: string } | null })[] = [
+  { id: "t1", client_id: "1", title: "Send updated SOW by Friday", description: null, status: "todo", priority: "high", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-14", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
+  { id: "t2", client_id: "1", title: "Schedule follow-up with VP", description: null, status: "todo", priority: "medium", assignee_id: "tm2", assigned_role: null, due_date: "2026-02-18", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
+  { id: "t4", client_id: "1", title: "Review resource allocation", description: null, status: "done", priority: "medium", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-10", intelligence_id: "i2", workflow_template_id: null, source: "auto", created_at: "2026-02-07", updated_at: "2026-02-11", clients: { name: "Acme Corp" } },
+];
 
 export function ClientTasks({ clientId }: ClientTasksProps) {
-  const {
-    workflowTemplates,
-    setWorkflowTemplates,
-    teamMembers,
-    getRequestHeaders,
-  } = useTeamContext();
-
-  const [tasks, setTasks] = useState<TaskWithClient[]>([]);
-  const [client, setClient] = useState<Client | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null);
+  const [tasks, setTasks] = useState(placeholderTasks);
   const [formOpen, setFormOpen] = useState(false);
-  const [detailTask, setDetailTask] = useState<TaskWithClient | null>(null);
-  const [editingTask, setEditingTask] = useState<TaskWithClient | null>(null);
+  const [detailTask, setDetailTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
+  const [editingTask, setEditingTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateDefaults, setTemplateDefaults] = useState<WorkflowStep | null>(null);
   const [saveAsTemplateOpen, setSaveAsTemplateOpen] = useState(false);
 
-  const formClients = useMemo(() => (client ? [client] : []), [client]);
-  const memberMap = useMemo(
-    () => new Map(teamMembers.map((member) => [member.id, member.name])),
-    [teamMembers]
-  );
-
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      setPageError(null);
-
-      try {
-        const [tasksRes, clientRes] = await Promise.all([
-          fetch(`/api/tasks?client_id=${clientId}`, { headers: getRequestHeaders() }),
-          fetch(`/api/clients/${clientId}`, { headers: getRequestHeaders() }),
-        ]);
-
-        const tasksJson = (await tasksRes.json()) as { data?: TaskWithClient[]; error?: string };
-        const clientJson = (await clientRes.json()) as { data?: Client; error?: string };
-
-        if (!tasksRes.ok) {
-          throw new Error(tasksJson.error ?? "Failed to load tasks");
-        }
-        if (!clientRes.ok) {
-          throw new Error(clientJson.error ?? "Failed to load account details");
-        }
-
-        setTasks(tasksJson.data ?? []);
-        setClient(clientJson.data ?? null);
-      } catch (error) {
-        setTasks([]);
-        setClient(null);
-        setPageError(error instanceof Error ? error.message : "Failed to load tasks");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void loadData();
-  }, [clientId, getRequestHeaders]);
-
-  async function patchTask(taskId: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...getRequestHeaders(),
-      },
-      body: JSON.stringify(updates),
-    });
-
-    const json = (await res.json()) as { data?: Task; error?: string };
-    if (!res.ok || !json.data) {
-      throw new Error(json.error ?? "Failed to update task");
-    }
-
-    return json.data;
-  }
-
-  function withClientName(task: Task): TaskWithClient {
-    return {
-      ...task,
-      clients: {
-        name: client?.name ?? "Unknown",
-      },
-    };
-  }
+  const { workflowTemplates, setWorkflowTemplates } = useTeamContext();
+  const memberMap = new Map(placeholderTeam.map((m) => [m.id, m.name]));
 
   function handleToggleStatus(taskId: string, done: boolean) {
-    setPageError(null);
-    const previous = tasks;
-    const nextStatus: TaskStatus = done ? "done" : "todo";
-
     setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, status: nextStatus } : task
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: (done ? "done" : "todo") as TaskStatus } : t
       )
     );
-
-    void (async () => {
-      try {
-        const updated = await patchTask(taskId, { status: nextStatus });
-        setTasks((prev) =>
-          prev.map((task) =>
-            task.id === taskId
-              ? {
-                  ...task,
-                  ...updated,
-                  clients: task.clients ?? { name: client?.name ?? "Unknown" },
-                }
-              : task
-          )
-        );
-      } catch (error) {
-        setTasks(previous);
-        setPageError(error instanceof Error ? error.message : "Failed to update task");
-      }
-    })();
-  }
-
-  async function createTask(
-    task: {
-      client_id: string;
-      title: string;
-      description: string;
-      priority: Task["priority"];
-      assignee_id: string;
-      assigned_role: Task["assigned_role"];
-      due_date: string;
-    },
-    source: Task["source"] = "manual"
-  ) {
-    setPageError(null);
-
-    const optimisticId = `task-optimistic-${Date.now()}`;
-    const optimisticTask: TaskWithClient = {
-      id: optimisticId,
-      client_id: task.client_id,
-      title: task.title,
-      description: task.description || null,
-      status: "todo",
-      priority: task.priority,
-      assignee_id: task.assignee_id || null,
-      assigned_role: task.assigned_role ?? null,
-      due_date: task.due_date || null,
-      intelligence_id: null,
-      workflow_template_id: null,
-      source,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      clients: { name: client?.name ?? "Unknown" },
-    };
-
-    setTasks((prev) => [optimisticTask, ...prev]);
-
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
-        body: JSON.stringify({
-          ...task,
-          description: task.description || null,
-          assignee_id: task.assignee_id || null,
-          due_date: task.due_date || null,
-          source,
-        }),
-      });
-
-      const json = (await res.json()) as { data?: Task; error?: string };
-      if (!res.ok || !json.data) {
-        throw new Error(json.error ?? "Failed to create task");
-      }
-
-      setTasks((prev) =>
-        prev.map((item) => (item.id === optimisticId ? withClientName(json.data!) : item))
-      );
-    } catch (error) {
-      setTasks((prev) => prev.filter((item) => item.id !== optimisticId));
-      setPageError(error instanceof Error ? error.message : "Failed to create task");
-    }
-  }
-
-  async function updateTask(
-    taskId: string,
-    updates: {
-      client_id: string;
-      title: string;
-      description: string;
-      priority: Task["priority"];
-      assignee_id: string;
-      assigned_role: Task["assigned_role"];
-      due_date: string;
-    }
-  ) {
-    setPageError(null);
-    const previous = tasks;
-
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              ...updates,
-              description: updates.description || null,
-              assignee_id: updates.assignee_id || null,
-              assigned_role: updates.assigned_role ?? null,
-              due_date: updates.due_date || null,
-              clients: task.clients ?? { name: client?.name ?? "Unknown" },
-            }
-          : task
-      )
-    );
-
-    try {
-      const updated = await patchTask(taskId, {
-        client_id: updates.client_id,
-        title: updates.title,
-        description: updates.description || null,
-        priority: updates.priority,
-        assignee_id: updates.assignee_id || null,
-        assigned_role: updates.assigned_role ?? null,
-        due_date: updates.due_date || null,
-      });
-
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                ...updated,
-                clients: task.clients ?? { name: client?.name ?? "Unknown" },
-              }
-            : task
-        )
-      );
-    } catch (error) {
-      setTasks(previous);
-      setPageError(error instanceof Error ? error.message : "Failed to update task");
-    }
-  }
-
-  function handleSaveAsTemplate(data: {
-    name: string;
-    description: string;
-    steps: WorkflowStep[];
-  }) {
-    setPageError(null);
-
-    const optimisticId = `workflow-optimistic-${Date.now()}`;
-    const optimisticTemplate: WorkflowTemplate = {
-      id: optimisticId,
-      name: data.name,
-      description: data.description || null,
-      steps: data.steps,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setWorkflowTemplates((prev) => [optimisticTemplate, ...prev]);
-
-    void (async () => {
-      try {
-        const res = await fetch("/api/workflows", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getRequestHeaders(),
-          },
-          body: JSON.stringify({
-            name: data.name,
-            description: data.description || null,
-            steps: data.steps,
-          }),
-        });
-
-        const json = (await res.json()) as { data?: WorkflowTemplate; error?: string };
-        if (!res.ok || !json.data) {
-          throw new Error(json.error ?? "Failed to save workflow template");
-        }
-
-        setWorkflowTemplates((prev) =>
-          prev.map((template) =>
-            template.id === optimisticId ? json.data! : template
-          )
-        );
-      } catch (error) {
-        setWorkflowTemplates((prev) =>
-          prev.filter((template) => template.id !== optimisticId)
-        );
-        setPageError(
-          error instanceof Error ? error.message : "Failed to save workflow template"
-        );
-      }
-    })();
-  }
-
-  if (loading) {
-    return <p className="text-sm text-muted-foreground">Loading tasks...</p>;
   }
 
   return (
@@ -341,11 +73,9 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
         </div>
       </div>
 
-      {pageError && <p className="text-sm text-destructive">{pageError}</p>}
-
       <TaskList
         tasks={tasks}
-        teamMembers={teamMembers}
+        teamMembers={placeholderTeam}
         onToggleStatus={handleToggleStatus}
         onTaskClick={(task) => setDetailTask(task)}
         emptyMessage="No tasks for this account yet"
@@ -354,20 +84,30 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
       <TaskForm
         open={formOpen && !templateDefaults}
         onOpenChange={setFormOpen}
-        clients={formClients}
-        teamMembers={teamMembers}
+        clients={placeholderClients}
+        teamMembers={placeholderTeam}
         defaultClientId={clientId}
         onSubmit={(task) => {
-          void createTask(task, "manual");
+          const newTask: Task & { clients?: { name: string } | null } = {
+            id: `t${Date.now()}`,
+            ...task,
+            assigned_role: task.assigned_role ?? null,
+            status: "todo",
+            intelligence_id: null,
+            workflow_template_id: null,
+            source: "manual",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            clients: null,
+          };
+          setTasks((prev) => [newTask, ...prev]);
         }}
       />
 
       {detailTask && (
         <TaskDetailDialog
           open={!!detailTask}
-          onOpenChange={(open) => {
-            if (!open) setDetailTask(null);
-          }}
+          onOpenChange={(open) => { if (!open) setDetailTask(null); }}
           task={detailTask}
           assigneeName={detailTask.assignee_id ? memberMap.get(detailTask.assignee_id) : undefined}
           onEdit={() => {
@@ -379,16 +119,21 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
 
       <TaskForm
         open={!!editingTask}
-        onOpenChange={(open) => {
-          if (!open) setEditingTask(null);
-        }}
-        clients={formClients}
-        teamMembers={teamMembers}
+        onOpenChange={(open) => { if (!open) setEditingTask(null); }}
+        clients={placeholderClients}
+        teamMembers={placeholderTeam}
         defaultClientId={clientId}
         task={editingTask}
-        onSubmit={(updatedTask) => {
-          if (!editingTask) return;
-          void updateTask(editingTask.id, updatedTask);
+        onSubmit={(updated) => {
+          if (editingTask) {
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === editingTask.id
+                  ? { ...t, ...updated, assigned_role: updated.assigned_role ?? null, updated_at: new Date().toISOString() }
+                  : t
+              )
+            );
+          }
           setEditingTask(null);
         }}
       />
@@ -403,6 +148,7 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
         }}
       />
 
+      {/* Pre-fill the "Add Task" form when a template step was selected */}
       {templateDefaults && (
         <TaskForm
           open={formOpen && !!templateDefaults}
@@ -410,8 +156,8 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
             setFormOpen(open);
             if (!open) setTemplateDefaults(null);
           }}
-          clients={formClients}
-          teamMembers={teamMembers}
+          clients={placeholderClients}
+          teamMembers={placeholderTeam}
           defaultClientId={clientId}
           defaults={{
             title: templateDefaults.title,
@@ -420,7 +166,19 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
             assigned_role: templateDefaults.assigned_role,
           }}
           onSubmit={(task) => {
-            void createTask(task, "workflow");
+            const newTask: Task & { clients?: { name: string } | null } = {
+              id: `t${Date.now()}`,
+              ...task,
+              assigned_role: task.assigned_role ?? null,
+              status: "todo",
+              intelligence_id: null,
+              workflow_template_id: null,
+              source: "workflow",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              clients: null,
+            };
+            setTasks((prev) => [newTask, ...prev]);
             setTemplateDefaults(null);
           }}
         />
@@ -434,19 +192,29 @@ export function ClientTasks({ clientId }: ClientTasksProps) {
           name: "",
           description: null,
           steps: tasks
-            .filter((task) => task.status !== "done")
-            .map((task, index) => ({
-              title: task.title,
-              description: task.description,
-              assigned_role: task.assigned_role ?? "onboarding",
-              priority: task.priority,
+            .filter((t) => t.status !== "done")
+            .map((t, i) => ({
+              title: t.title,
+              description: t.description,
+              assigned_role: t.assigned_role ?? "onboarding",
+              priority: t.priority,
               due_in_days: 0,
-              order: index + 1,
+              order: i + 1,
             })),
           created_at: "",
           updated_at: "",
         }}
-        onSubmit={handleSaveAsTemplate}
+        onSubmit={(data) => {
+          const newTemplate = {
+            id: `wf-${Date.now()}`,
+            name: data.name,
+            description: data.description || null,
+            steps: data.steps,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          setWorkflowTemplates((prev) => [newTemplate, ...prev]);
+        }}
       />
     </div>
   );

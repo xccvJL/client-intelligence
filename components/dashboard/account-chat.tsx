@@ -13,7 +13,7 @@ interface AccountChatProps {
 }
 
 export function AccountChat({ clientId, intelligence }: AccountChatProps) {
-  const { getPrompt, getRequestHeaders } = useTeamContext();
+  const { getPrompt } = useTeamContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,10 +44,7 @@ export function AccountChat({ clientId, intelligence }: AccountChatProps) {
     try {
       const res = await fetch(`/api/clients/${clientId}/chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question, intelligence, systemPrompt: getPrompt("account_qa") }),
       });
 

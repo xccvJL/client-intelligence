@@ -14,10 +14,10 @@ import type { Task, TaskPriority, TeamRole } from "@/lib/types";
 // Read-only dialog showing all task fields with an "Edit" button.
 
 const priorityConfig: Record<TaskPriority, { label: string; className: string }> = {
-  low: { label: "Low", className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
-  medium: { label: "Medium", className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300" },
-  high: { label: "High", className: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" },
-  urgent: { label: "Urgent", className: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
+  low: { label: "Low", className: "bg-gray-100 text-gray-700" },
+  medium: { label: "Medium", className: "bg-blue-100 text-blue-700" },
+  high: { label: "High", className: "bg-orange-100 text-orange-700" },
+  urgent: { label: "Urgent", className: "bg-red-100 text-red-700" },
 };
 
 const statusLabels: Record<string, string> = {
@@ -99,7 +99,7 @@ export function TaskDetailDialog({
             {task.assigned_role && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-1">Role</p>
-                <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
+                <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
                   {roleLabels[task.assigned_role]}
                 </Badge>
               </div>

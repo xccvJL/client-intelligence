@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -9,8 +9,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useTeamContext } from "@/components/dashboard/team-context";
-import type { SourceType, KnowledgeSource } from "@/lib/types";
+import type { SourceType } from "@/lib/types";
+
+// Shows which knowledge sources are active for a specific client.
+// Each source has a toggle that creates/updates a client_source_override
+// in the database. When there's no override, the global default applies.
 
 interface SourceOverrideProps {
   clientId: string;
@@ -21,12 +24,7 @@ interface SourceWithOverride {
   name: string;
   source_type: SourceType;
   globalEnabled: boolean;
-  overrideEnabled: boolean | null;
-}
-
-interface ClientSourceOverrideApiRow {
-  knowledge_source_id: string;
-  enabled: boolean;
+  overrideEnabled: boolean | null; // null = no override, use global
 }
 
 const sourceTypeLabels: Record<SourceType, string> = {
@@ -35,109 +33,54 @@ const sourceTypeLabels: Record<SourceType, string> = {
   manual_note: "Manual",
 };
 
+// Placeholder data — will come from API once Supabase is connected
+const placeholderSources: SourceWithOverride[] = [
+  {
+    id: "1",
+    name: "Gmail",
+    source_type: "gmail",
+    globalEnabled: true,
+    overrideEnabled: null,
+  },
+  {
+    id: "2",
+    name: "Google Drive (Meet Transcripts)",
+    source_type: "google_drive",
+    globalEnabled: true,
+    overrideEnabled: null,
+  },
+  {
+    id: "3",
+    name: "Manual Notes",
+    source_type: "manual_note",
+    globalEnabled: true,
+    overrideEnabled: null,
+  },
+];
+
 export function ClientSourceOverrides({ clientId }: SourceOverrideProps) {
-  const { getRequestHeaders } = useTeamContext();
-  const [sources, setSources] = useState<SourceWithOverride[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [sources, setSources] = useState(placeholderSources);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [sourcesRes, overridesRes] = await Promise.all([
-          fetch("/api/sources", { headers: getRequestHeaders() }),
-          fetch(`/api/clients/${clientId}/overrides`, { headers: getRequestHeaders() }),
-        ]);
-
-        const sourcesJson = (await sourcesRes.json()) as { data?: KnowledgeSource[]; error?: string };
-        const overridesJson = (await overridesRes.json()) as { data?: ClientSourceOverrideApiRow[]; error?: string };
-
-        if (!sourcesRes.ok) {
-          throw new Error(sourcesJson.error ?? "Failed to load sources");
-        }
-        if (!overridesRes.ok) {
-          throw new Error(overridesJson.error ?? "Failed to load overrides");
-        }
-
-        const overridesMap = new Map(
-          (overridesJson.data ?? []).map((item) => [item.knowledge_source_id, item.enabled])
-        );
-
-        const merged: SourceWithOverride[] = (sourcesJson.data ?? []).map((source) => ({
-          id: source.id,
-          name: source.name,
-          source_type: source.source_type,
-          globalEnabled: source.enabled,
-          overrideEnabled: overridesMap.has(source.id) ? overridesMap.get(source.id)! : null,
-        }));
-
-        setSources(merged);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load source overrides");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void load();
-  }, [clientId, getRequestHeaders]);
-
-  const stateById = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
-
-  async function toggleOverride(sourceId: string) {
-    setError(null);
-    const previous = sources;
-
-    const source = stateById.get(sourceId);
-    if (!source) return;
-
-    const nextOverride =
-      source.overrideEnabled === null
-        ? false
-        : source.overrideEnabled === false
-          ? true
-          : null;
-
+  // Cycle through: global default -> enabled override -> disabled override -> back to global
+  function toggleOverride(sourceId: string) {
     setSources((prev) =>
-      prev.map((item) =>
-        item.id === sourceId ? { ...item, overrideEnabled: nextOverride } : item
-      )
-    );
+      prev.map((s) => {
+        if (s.id !== sourceId) return s;
 
-    try {
-      if (nextOverride === null) {
-        const params = new URLSearchParams({ knowledge_source_id: sourceId });
-        const res = await fetch(`/api/clients/${clientId}/overrides?${params.toString()}`, {
-          method: "DELETE",
-          headers: getRequestHeaders(),
-        });
-        const json = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          throw new Error(json.error ?? "Failed to remove override");
+        if (s.overrideEnabled === null) {
+          // No override -> set to disabled (overriding global on -> off)
+          return { ...s, overrideEnabled: false };
+        } else if (s.overrideEnabled === false) {
+          // Disabled override -> set to enabled
+          return { ...s, overrideEnabled: true };
+        } else {
+          // Enabled override -> remove override (back to global)
+          return { ...s, overrideEnabled: null };
         }
-      } else {
-        const res = await fetch(`/api/clients/${clientId}/overrides`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getRequestHeaders(),
-          },
-          body: JSON.stringify({
-            knowledge_source_id: sourceId,
-            enabled: nextOverride,
-          }),
-        });
-        const json = (await res.json()) as { error?: string };
-        if (!res.ok) {
-          throw new Error(json.error ?? "Failed to update override");
-        }
-      }
-    } catch (err) {
-      setSources(previous);
-      setError(err instanceof Error ? err.message : "Failed to update override");
-    }
+      })
+    );
+    // Will call POST /api/clients/[id]/overrides once connected
+    void clientId; // Used when wiring to API
   }
 
   function getEffectiveState(source: SourceWithOverride): {
@@ -166,59 +109,52 @@ export function ClientSourceOverrides({ clientId }: SourceOverrideProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {error && <p className="text-sm text-destructive mb-3">{error}</p>}
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading sources...</p>
-        ) : (
-          <div className="space-y-3">
-            {sources.map((source) => {
-              const state = getEffectiveState(source);
+        <div className="space-y-3">
+          {sources.map((source) => {
+            const state = getEffectiveState(source);
 
-              return (
-                <div
-                  key={source.id}
-                  className="flex items-center justify-between py-2"
-                >
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        void toggleOverride(source.id);
-                      }}
-                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                        state.active ? "bg-primary" : "bg-muted"
+            return (
+              <div
+                key={source.id}
+                className="flex items-center justify-between py-2"
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => toggleOverride(source.id)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                      state.active ? "bg-primary" : "bg-muted"
+                    }`}
+                    role="switch"
+                    aria-checked={state.active}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${
+                        state.active ? "translate-x-4" : "translate-x-0"
                       }`}
-                      role="switch"
-                      aria-checked={state.active}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition-transform ${
-                          state.active ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium">{source.name}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {sourceTypeLabels[source.source_type]}
-                        </Badge>
-                      </div>
+                    />
+                  </button>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">{source.name}</p>
+                      <Badge variant="outline" className="text-xs">
+                        {sourceTypeLabels[source.source_type]}
+                      </Badge>
                     </div>
                   </div>
-                  <span
-                    className={`text-xs ${
-                      source.overrideEnabled !== null
-                        ? "text-foreground font-medium"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {state.label}
-                  </span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <span
+                  className={`text-xs ${
+                    source.overrideEnabled !== null
+                      ? "text-foreground font-medium"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {state.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

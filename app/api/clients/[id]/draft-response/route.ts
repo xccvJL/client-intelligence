@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateDraftResponse } from "@/lib/gemini";
-import { fetchClientIntelligence } from "@/lib/intelligence";
-import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
+import type { Intelligence } from "@/lib/types";
 
 // POST /api/clients/[id]/draft-response — draft an email reply for a specific entry
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
+  await params;
 
   try {
-    const { teamMember } = await requireAuth(request);
-    await requireClientAccess(teamMember.id, id);
-
-    const { entryId, clientName, systemPrompt } = (await request.json()) as {
+    const { intelligence, entryId, clientName, systemPrompt } = (await request.json()) as {
+      intelligence: Intelligence[];
       entryId: string;
       clientName: string;
       systemPrompt?: string;
@@ -27,9 +24,8 @@ export async function POST(
       );
     }
 
-    const intelligence = await fetchClientIntelligence(id);
     const draft = await generateDraftResponse(
-      intelligence,
+      intelligence ?? [],
       entryId,
       clientName,
       systemPrompt
@@ -44,9 +40,6 @@ export async function POST(
 
     return NextResponse.json({ data: draft });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error("POST /api/clients/[id]/draft-response failed:", err);
     return NextResponse.json(
       { error: "Failed to generate draft response" },

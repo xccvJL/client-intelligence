@@ -48,25 +48,6 @@ export function ClientIntelligence({
     setDraftDialogOpen(true);
   }
 
-  function getSourceLabel(source: string) {
-    const normalized = source.trim().toLowerCase();
-    if (normalized === "email" || normalized === "gmail") return "Email";
-    if (
-      normalized === "transcript" ||
-      normalized === "google_drive" ||
-      normalized === "drive"
-    ) {
-      return "Transcript";
-    }
-    if (normalized === "manual_note" || normalized === "note") return "Note";
-    return source;
-  }
-
-  function isEmailSource(source: string) {
-    const normalized = source.trim().toLowerCase();
-    return normalized === "email" || normalized === "gmail";
-  }
-
   return (
     <>
       {entries.map((item) => (
@@ -76,7 +57,8 @@ export function ClientIntelligence({
               <div className="space-y-1">
                 <CardTitle className="text-base">{item.summary}</CardTitle>
                 <CardDescription>
-                  {getSourceLabel(item.source)} &middot; {item.date}
+                  {item.source === "email" ? "Email" : "Transcript"} &middot;{" "}
+                  {item.date}
                 </CardDescription>
               </div>
               <Badge
@@ -111,7 +93,7 @@ export function ClientIntelligence({
                 </ul>
               </div>
             )}
-            {isEmailSource(item.source) && (
+            {item.source === "email" && (
               <div className="mt-3">
                 <Button
                   variant="outline"

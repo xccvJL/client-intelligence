@@ -10,19 +10,19 @@ const sentimentConfig: Record<
 > = {
   positive: {
     label: "Positive",
-    className: "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-950",
+    className: "bg-green-100 text-green-800 hover:bg-green-100",
   },
   neutral: {
     label: "Neutral",
-    className: "bg-gray-100 text-gray-800 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-800",
+    className: "bg-gray-100 text-gray-800 hover:bg-gray-100",
   },
   negative: {
     label: "Negative",
-    className: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-950",
+    className: "bg-red-100 text-red-800 hover:bg-red-100",
   },
   mixed: {
     label: "Mixed",
-    className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-950 dark:text-yellow-300 dark:hover:bg-yellow-950",
+    className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
   },
 };
 

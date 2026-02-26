@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
 
 // GET /api/clients/[id]/overrides — list source overrides for a client.
 // Returns which sources are overridden for this client, joined with
@@ -13,9 +12,6 @@ export async function GET(
   const supabase = createServerClient();
 
   try {
-    const { teamMember } = await requireAuth(request);
-    await requireClientAccess(teamMember.id, id);
-
     const { data, error } = await supabase
       .from("client_source_overrides")
       .select("*, knowledge_sources(name, source_type, enabled)")
@@ -25,9 +21,6 @@ export async function GET(
 
     return NextResponse.json({ data: data ?? [] });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error(`GET /api/clients/${id}/overrides failed:`, err);
     return NextResponse.json(
       { error: "Failed to fetch overrides" },
@@ -47,9 +40,6 @@ export async function POST(
   const supabase = createServerClient();
 
   try {
-    const { teamMember } = await requireAuth(request);
-    await requireClientAccess(teamMember.id, clientId);
-
     const body = await request.json();
     const { knowledge_source_id, enabled, configuration_override } = body;
 
@@ -101,9 +91,6 @@ export async function POST(
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error(`POST /api/clients/${clientId}/overrides failed:`, err);
     return NextResponse.json(
       { error: "Failed to create override" },
@@ -130,9 +117,6 @@ export async function DELETE(
   }
 
   try {
-    const { teamMember } = await requireAuth(request);
-    await requireClientAccess(teamMember.id, clientId);
-
     const { error } = await supabase
       .from("client_source_overrides")
       .delete()
@@ -143,9 +127,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error(`DELETE /api/clients/${clientId}/overrides failed:`, err);
     return NextResponse.json(
       { error: "Failed to delete override" },

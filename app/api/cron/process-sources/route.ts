@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { sendOpsAlert } from "@/lib/ops-alerts";
-import { constantTimeEqual } from "@/lib/security";
 import { processorRegistry } from "@/lib/processors";
 import type { KnowledgeSource, Client } from "@/lib/types";
 
@@ -12,16 +10,11 @@ import type { KnowledgeSource, Client } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
-  const providedSecret = authHeader?.startsWith("Bearer ")
-    ? authHeader.slice("Bearer ".length).trim()
-    : null;
-  if (!constantTimeEqual(providedSecret, process.env.CRON_SECRET)) {
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createServerClient();
-  const runId = `run-${Date.now()}`;
-  const startedAt = new Date().toISOString();
 
   try {
     // Get all enabled knowledge sources
@@ -40,10 +33,7 @@ export async function GET(request: NextRequest) {
     if (clientsError) throw clientsError;
 
     const allClients = (clients ?? []) as Client[];
-    const results: Record<
-      string,
-      { processed: number; errors: number; skipped?: boolean; error_message?: string }
-    > = {};
+    const results: Record<string, { processed: number; errors: number; skipped?: boolean }> = {};
 
     for (const source of (sources ?? []) as KnowledgeSource[]) {
       // Check if this source is due for a sync based on its interval
@@ -83,7 +73,7 @@ export async function GET(request: NextRequest) {
           items_processed: result.processed,
           error_message:
             result.error_messages.length > 0
-              ? `[${runId}] ${result.error_messages.join("; ")}`
+              ? result.error_messages.join("; ")
               : null,
         });
 
@@ -93,44 +83,21 @@ export async function GET(request: NextRequest) {
         };
       } catch (err) {
         console.error(`Processor failed for ${source.name}:`, err);
-        const errorMessage = err instanceof Error ? err.message : "Unknown error";
 
         await supabase.from("sync_logs").insert({
           knowledge_source_id: source.id,
           status: "error",
           items_processed: 0,
-          error_message: `[${runId}] ${errorMessage}`,
+          error_message: err instanceof Error ? err.message : "Unknown error",
         });
 
-        await sendOpsAlert({
-          event: "source_processor_failure",
-          severity: "error",
-          message: `Source processor failed for ${source.name}`,
-          details: { run_id: runId, source_id: source.id, source_name: source.name, error: errorMessage },
-        });
-
-        results[source.name] = { processed: 0, errors: 1, error_message: errorMessage };
+        results[source.name] = { processed: 0, errors: 1 };
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      run_id: runId,
-      started_at: startedAt,
-      finished_at: new Date().toISOString(),
-      results,
-    });
+    return NextResponse.json({ success: true, results });
   } catch (err) {
     console.error("Cron process-sources failed:", err);
-    await sendOpsAlert({
-      event: "cron_process_sources_failure",
-      severity: "error",
-      message: "Cron source processing failed before completion",
-      details: {
-        run_id: runId,
-        error: err instanceof Error ? err.message : "Unknown error",
-      },
-    });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

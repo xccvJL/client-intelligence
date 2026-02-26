@@ -8,9 +8,9 @@ import type { HealthAlert, AlertSeverity } from "@/lib/types";
 // an "Acknowledge" button to dismiss it.
 
 const severityConfig: Record<AlertSeverity, { label: string; className: string; icon: string }> = {
-  info: { label: "Info", className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300", icon: "i" },
-  warning: { label: "Warning", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300", icon: "!" },
-  critical: { label: "Critical", className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300", icon: "!!" },
+  info: { label: "Info", className: "bg-blue-100 text-blue-700", icon: "i" },
+  warning: { label: "Warning", className: "bg-yellow-100 text-yellow-800", icon: "!" },
+  critical: { label: "Critical", className: "bg-red-100 text-red-800", icon: "!!" },
 };
 
 interface AlertCardProps {

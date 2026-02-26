@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -59,15 +59,6 @@ interface PlaceholderSource {
   configuration: Record<string, unknown>;
   sync_interval_minutes: number;
   last_synced_at: string | null;
-}
-
-interface LeadEnrichmentPromptDetails {
-  key: string;
-  label: string;
-  source: string;
-  default_system_prompt: string;
-  effective_system_prompt: string;
-  prompt_template_preview: string;
 }
 
 const initialSources: PlaceholderSource[] = [
@@ -134,8 +125,7 @@ function formatLastSynced(timestamp: string | null): string {
 
 export default function SettingsPage() {
   const [sources, setSources] = useState(initialSources);
-  const { addIncomingLead, systemPrompts, setSystemPrompts, getRequestHeaders } =
-    useTeamContext();
+  const { addIncomingLead, currentUser, systemPrompts, setSystemPrompts } = useTeamContext();
 
   // Local editing state for AI prompts — tracks in-progress edits before saving
   const [promptEdits, setPromptEdits] = useState<Record<string, string>>({});
@@ -143,11 +133,6 @@ export default function SettingsPage() {
   const [savedFeedback, setSavedFeedback] = useState<Record<string, boolean>>({});
   // Tracks which prompts are showing the default comparison
   const [showOriginal, setShowOriginal] = useState<Record<string, boolean>>({});
-  // Admin prompt inspector for the webhook lead-enrichment step
-  const [leadPromptDetails, setLeadPromptDetails] =
-    useState<LeadEnrichmentPromptDetails | null>(null);
-  const [leadPromptLoading, setLeadPromptLoading] = useState(true);
-  const [leadPromptError, setLeadPromptError] = useState<string | null>(null);
 
   // Briefly flash "Saved" next to a prompt's Save button, then hide after 2 seconds
   const flashSaved = useCallback((key: string) => {
@@ -160,39 +145,6 @@ export default function SettingsPage() {
       });
     }, 2000);
   }, []);
-
-  useEffect(() => {
-    async function loadLeadPromptDetails() {
-      setLeadPromptLoading(true);
-      setLeadPromptError(null);
-
-      try {
-        const res = await fetch("/api/admin/prompts/lead-enrichment", {
-          headers: getRequestHeaders(),
-        });
-        const json = (await res.json()) as {
-          data?: LeadEnrichmentPromptDetails;
-          error?: string;
-        };
-
-        if (!res.ok) {
-          throw new Error(
-            json.error ?? "Failed to load lead enrichment prompt details"
-          );
-        }
-
-        setLeadPromptDetails(json.data ?? null);
-      } catch (err) {
-        setLeadPromptError(
-          err instanceof Error ? err.message : "Failed to load prompt details"
-        );
-      } finally {
-        setLeadPromptLoading(false);
-      }
-    }
-
-    void loadLeadPromptDetails();
-  }, [getRequestHeaders]);
 
   // --- Lead Capture Webhook state ---
   const [webhookApiKey, setWebhookApiKey] = useState("");
@@ -642,59 +594,6 @@ export default function SettingsPage() {
               </div>
             );
           })}
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Admin Prompt Inspector */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Admin Prompt Inspector</CardTitle>
-          <CardDescription>
-            Shows the exact server-side system prompt currently used for webhook
-            lead enrichment (target website/company identification step).
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {leadPromptLoading && (
-            <p className="text-sm text-muted-foreground">
-              Loading prompt details...
-            </p>
-          )}
-
-          {!leadPromptLoading && leadPromptError && (
-            <p className="text-sm text-destructive">{leadPromptError}</p>
-          )}
-
-          {!leadPromptLoading && !leadPromptError && leadPromptDetails && (
-            <>
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{leadPromptDetails.label}</p>
-                <Badge variant="secondary" className="text-xs">
-                  Source: {leadPromptDetails.source}
-                </Badge>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Effective system prompt</label>
-                <Textarea
-                  readOnly
-                  className="mt-1 min-h-[110px] text-sm"
-                  value={leadPromptDetails.effective_system_prompt}
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Full prompt template preview</label>
-                <Textarea
-                  readOnly
-                  className="mt-1 min-h-[200px] text-xs font-mono"
-                  value={leadPromptDetails.prompt_template_preview}
-                />
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
 

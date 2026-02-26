@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -62,27 +62,46 @@ export function TaskForm({
   defaults,
   onSubmit,
 }: TaskFormProps) {
-  const [title, setTitle] = useState(() => task?.title ?? defaults?.title ?? "");
-  const [description, setDescription] = useState(
-    () => task?.description ?? defaults?.description ?? ""
-  );
-  const [priority, setPriority] = useState<TaskPriority>(
-    () => task?.priority ?? defaults?.priority ?? "medium"
-  );
-  const [assignedRole, setAssignedRole] = useState<TeamRole | "">(
-    () => task?.assigned_role ?? defaults?.assigned_role ?? ""
-  );
-  const [assigneeId, setAssigneeId] = useState(() => task?.assignee_id ?? defaults?.assignee_id ?? "");
-  const [dueDate, setDueDate] = useState(() => task?.due_date ?? defaults?.due_date ?? "");
-  const [clientId, setClientId] = useState(
-    () => task?.client_id ?? defaults?.client_id ?? defaultClientId ?? ""
-  );
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [assignedRole, setAssignedRole] = useState<TeamRole | "">("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [clientId, setClientId] = useState(defaultClientId ?? "");
 
   const isEditing = !!task;
-  const defaultsKey = defaults
-    ? `${defaults.title ?? ""}:${defaults.client_id ?? ""}:${defaults.assigned_role ?? ""}:${defaults.priority ?? ""}:${defaults.due_date ?? ""}`
-    : "no-defaults";
-  const formKey = `${open ? "open" : "closed"}:${task?.id ?? "new"}:${defaultClientId ?? ""}:${defaultsKey}`;
+
+  // Populate form from existing task, defaults, or reset for new
+  useEffect(() => {
+    if (open) {
+      if (task) {
+        setTitle(task.title);
+        setDescription(task.description ?? "");
+        setPriority(task.priority);
+        setAssignedRole(task.assigned_role ?? "");
+        setAssigneeId(task.assignee_id ?? "");
+        setDueDate(task.due_date ?? "");
+        setClientId(task.client_id);
+      } else if (defaults) {
+        setTitle(defaults.title ?? "");
+        setDescription(defaults.description ?? "");
+        setPriority(defaults.priority ?? "medium");
+        setAssignedRole(defaults.assigned_role ?? "");
+        setAssigneeId(defaults.assignee_id ?? "");
+        setDueDate(defaults.due_date ?? "");
+        setClientId(defaults.client_id ?? defaultClientId ?? "");
+      } else {
+        setTitle("");
+        setDescription("");
+        setPriority("medium");
+        setAssignedRole("");
+        setAssigneeId("");
+        setDueDate("");
+        setClientId(defaultClientId ?? "");
+      }
+    }
+  }, [open, defaultClientId, task, defaults]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,7 +121,7 @@ export function TaskForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent key={formKey} className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Task" : "Add Task"}</DialogTitle>
         </DialogHeader>

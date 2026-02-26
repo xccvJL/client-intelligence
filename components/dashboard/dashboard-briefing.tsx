@@ -24,7 +24,7 @@ interface DashboardBriefingProps {
 }
 
 export function DashboardBriefing({ summaryText }: DashboardBriefingProps) {
-  const { getPrompt, getRequestHeaders } = useTeamContext();
+  const { getPrompt } = useTeamContext();
   const [items, setItems] = useState<DashboardBriefingItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,10 +36,7 @@ export function DashboardBriefing({ summaryText }: DashboardBriefingProps) {
     try {
       const res = await fetch("/api/dashboard-briefing", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summaryText, systemPrompt: getPrompt("dashboard_briefing") }),
       });
       const json = await res.json();

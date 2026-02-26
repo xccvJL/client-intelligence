@@ -1,254 +1,59 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { TaskList } from "@/components/dashboard/task-list";
 import { TaskForm } from "@/components/dashboard/task-form";
 import { TaskDetailDialog } from "@/components/dashboard/task-detail-dialog";
 import { TaskFromTemplateDialog } from "@/components/dashboard/task-from-template-dialog";
-import { BulkActionBar } from "@/components/dashboard/bulk-action-bar";
 import { useTeamContext } from "@/components/dashboard/team-context";
-import type { Task, TaskStatus, Client, WorkflowStep } from "@/lib/types";
+import type { Task, TaskStatus, Client, TeamMember, WorkflowStep } from "@/lib/types";
 
-type TaskWithClient = Task & { clients?: { name: string } | null };
+// My Tasks page — shows all tasks with status filter tabs.
+// The "Add Task" button opens a dialog for creating new tasks.
+
+const placeholderTeam: TeamMember[] = [
+  { id: "tm1", name: "Sarah Chen", email: "sarah@thrive.com", role: "account_manager", gmail_watch_label: null, created_at: "" },
+  { id: "tm2", name: "Mike Torres", email: "mike@thrive.com", role: "sales", gmail_watch_label: null, created_at: "" },
+];
+
+const placeholderClients: Client[] = [
+  { id: "1", name: "Acme Corp", domain: "acme.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
+  { id: "2", name: "Globex Inc", domain: "globex.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
+  { id: "3", name: "Initech", domain: "initech.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
+];
+
+const placeholderTasks: (Task & { clients?: { name: string } | null })[] = [
+  { id: "t1", client_id: "1", title: "Send updated SOW by Friday", description: null, status: "todo", priority: "high", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-14", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
+  { id: "t2", client_id: "1", title: "Schedule follow-up with VP", description: null, status: "todo", priority: "medium", assignee_id: "tm2", assigned_role: null, due_date: "2026-02-18", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
+  { id: "t3", client_id: "2", title: "Prepare quarterly budget review deck", description: "Include cost projections for Q3", status: "in_progress", priority: "high", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-15", intelligence_id: null, workflow_template_id: null, source: "manual", created_at: "2026-02-08", updated_at: "2026-02-08", clients: { name: "Globex Inc" } },
+  { id: "t4", client_id: "1", title: "Review resource allocation", description: null, status: "done", priority: "medium", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-10", intelligence_id: "i2", workflow_template_id: null, source: "auto", created_at: "2026-02-07", updated_at: "2026-02-11", clients: { name: "Acme Corp" } },
+  { id: "t5", client_id: "3", title: "Send onboarding checklist to new point of contact", description: null, status: "todo", priority: "low", assignee_id: null, assigned_role: "onboarding", due_date: null, intelligence_id: null, workflow_template_id: null, source: "manual", created_at: "2026-02-06", updated_at: "2026-02-06", clients: { name: "Initech" } },
+];
 
 export default function TasksPage() {
   const [formOpen, setFormOpen] = useState(false);
-  const [tasks, setTasks] = useState<TaskWithClient[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [pageError, setPageError] = useState<string | null>(null);
-  const [detailTask, setDetailTask] = useState<TaskWithClient | null>(null);
-  const [editingTask, setEditingTask] = useState<TaskWithClient | null>(null);
+  const [tasks, setTasks] = useState(placeholderTasks);
+  const [detailTask, setDetailTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
+  const [editingTask, setEditingTask] = useState<(Task & { clients?: { name: string } | null }) | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [templateDefaults, setTemplateDefaults] = useState<WorkflowStep | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { workflowTemplates, teamMembers, getRequestHeaders } = useTeamContext();
-  const memberMap = useMemo(
-    () => new Map(teamMembers.map((member) => [member.id, member.name])),
-    [teamMembers]
-  );
-  const clientNameById = useMemo(
-    () => new Map(clients.map((client) => [client.id, client.name])),
-    [clients]
-  );
+  const { workflowTemplates } = useTeamContext();
+  const memberMap = new Map(placeholderTeam.map((m) => [m.id, m.name]));
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      setPageError(null);
-      try {
-        const [tasksRes, clientsRes] = await Promise.all([
-          fetch("/api/tasks", { headers: getRequestHeaders() }),
-          fetch("/api/clients", { headers: getRequestHeaders() }),
-        ]);
-
-        const tasksJson = (await tasksRes.json()) as { data?: TaskWithClient[]; error?: string };
-        const clientsJson = (await clientsRes.json()) as { data?: Client[]; error?: string };
-
-        if (!tasksRes.ok) {
-          throw new Error(tasksJson.error ?? "Failed to load tasks");
-        }
-        if (!clientsRes.ok) {
-          throw new Error(clientsJson.error ?? "Failed to load clients");
-        }
-
-        setTasks(tasksJson.data ?? []);
-        setClients(clientsJson.data ?? []);
-      } catch (error) {
-        setPageError(error instanceof Error ? error.message : "Failed to load tasks");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void loadData();
-  }, [getRequestHeaders]);
-
-  async function patchTask(taskId: string, updates: Record<string, unknown>) {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...getRequestHeaders(),
-      },
-      body: JSON.stringify(updates),
-    });
-    const json = (await res.json()) as { data?: Task; error?: string };
-    if (!res.ok || !json.data) {
-      throw new Error(json.error ?? "Failed to update task");
-    }
-    return json.data;
-  }
-
-  async function deleteTask(taskId: string) {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: "DELETE",
-      headers: getRequestHeaders(),
-    });
-    const json = (await res.json()) as { error?: string };
-    if (!res.ok) {
-      throw new Error(json.error ?? "Failed to delete task");
-    }
-  }
-
-  async function handleToggleStatus(taskId: string, done: boolean) {
-    setPageError(null);
-    const previous = tasks;
-    const nextStatus: TaskStatus = done ? "done" : "todo";
-
+  function handleToggleStatus(taskId: string, done: boolean) {
     setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId ? { ...task, status: nextStatus } : task
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: (done ? "done" : "todo") as TaskStatus } : t
       )
     );
-
-    try {
-      const updated = await patchTask(taskId, { status: nextStatus });
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                ...updated,
-                clients: task.clients ?? (updated.client_id ? { name: clientNameById.get(updated.client_id) ?? "Unknown" } : null),
-              }
-            : task
-        )
-      );
-    } catch (error) {
-      setTasks(previous);
-      setPageError(error instanceof Error ? error.message : "Failed to update task");
-    }
   }
 
   function filterByStatus(status: TaskStatus | "all") {
     if (status === "all") return tasks;
-    return tasks.filter((task) => task.status === status);
-  }
-
-  async function createTask(
-    task: {
-      client_id: string;
-      title: string;
-      description: string;
-      priority: Task["priority"];
-      assignee_id: string;
-      assigned_role: Task["assigned_role"];
-      due_date: string;
-    },
-    source: Task["source"] = "manual"
-  ) {
-    setPageError(null);
-    const optimisticId = `task-optimistic-${Date.now()}`;
-    const optimisticTask: TaskWithClient = {
-      id: optimisticId,
-      client_id: task.client_id,
-      title: task.title,
-      description: task.description || null,
-      status: "todo",
-      priority: task.priority,
-      assignee_id: task.assignee_id || null,
-      assigned_role: task.assigned_role ?? null,
-      due_date: task.due_date || null,
-      intelligence_id: null,
-      workflow_template_id: null,
-      source,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      clients: { name: clientNameById.get(task.client_id) ?? "Unknown" },
-    };
-
-    setTasks((prev) => [optimisticTask, ...prev]);
-
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
-        body: JSON.stringify({
-          ...task,
-          source,
-        }),
-      });
-      const json = (await res.json()) as { data?: Task; error?: string };
-      if (!res.ok || !json.data) {
-        throw new Error(json.error ?? "Failed to create task");
-      }
-
-      setTasks((prev) =>
-        prev.map((item) =>
-          item.id === optimisticId
-            ? {
-                ...json.data!,
-                clients: {
-                  name:
-                    clientNameById.get(json.data!.client_id) ??
-                    optimisticTask.clients?.name ??
-                    "Unknown",
-                },
-              }
-            : item
-        )
-      );
-    } catch (error) {
-      setTasks((prev) => prev.filter((item) => item.id !== optimisticId));
-      setPageError(error instanceof Error ? error.message : "Failed to create task");
-    }
-  }
-
-  async function updateTask(
-    taskId: string,
-    updates: {
-      client_id: string;
-      title: string;
-      description: string;
-      priority: Task["priority"];
-      assignee_id: string;
-      assigned_role: Task["assigned_role"];
-      due_date: string;
-    }
-  ) {
-    setPageError(null);
-    const previous = tasks;
-
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              ...updates,
-              description: updates.description || null,
-              assignee_id: updates.assignee_id || null,
-              assigned_role: updates.assigned_role ?? null,
-              due_date: updates.due_date || null,
-              clients: { name: clientNameById.get(updates.client_id) ?? "Unknown" },
-            }
-          : task
-      )
-    );
-
-    try {
-      const updated = await patchTask(taskId, updates);
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                ...updated,
-                clients: { name: clientNameById.get(updated.client_id) ?? "Unknown" },
-              }
-            : task
-        )
-      );
-    } catch (error) {
-      setTasks(previous);
-      setPageError(error instanceof Error ? error.message : "Failed to update task");
-    }
+    return tasks.filter((t) => t.status === status);
   }
 
   return (
@@ -261,14 +66,6 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant={selectedIds.size > 0 ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedIds(new Set())}
-            className={selectedIds.size > 0 ? "" : "hidden sm:inline-flex"}
-          >
-            {selectedIds.size > 0 ? `${selectedIds.size} selected` : "Select"}
-          </Button>
           <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
             From Template
           </Button>
@@ -276,122 +73,88 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {pageError && <p className="text-sm text-destructive">{pageError}</p>}
+      <Tabs defaultValue="all">
+        <TabsList>
+          <TabsTrigger value="all">All ({tasks.length})</TabsTrigger>
+          <TabsTrigger value="todo">
+            To Do ({filterByStatus("todo").length})
+          </TabsTrigger>
+          <TabsTrigger value="in_progress">
+            In Progress ({filterByStatus("in_progress").length})
+          </TabsTrigger>
+          <TabsTrigger value="done">
+            Done ({filterByStatus("done").length})
+          </TabsTrigger>
+        </TabsList>
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Loading tasks...</p>
-      ) : (
-        <Tabs defaultValue="all">
-          <TabsList>
-            <TabsTrigger value="all">All ({tasks.length})</TabsTrigger>
-            <TabsTrigger value="todo">
-              To Do ({filterByStatus("todo").length})
-            </TabsTrigger>
-            <TabsTrigger value="in_progress">
-              In Progress ({filterByStatus("in_progress").length})
-            </TabsTrigger>
-            <TabsTrigger value="done">
-              Done ({filterByStatus("done").length})
-            </TabsTrigger>
-          </TabsList>
+        <TabsContent value="all" className="mt-4">
+          <TaskList
+            tasks={tasks}
+            teamMembers={placeholderTeam}
+            onToggleStatus={handleToggleStatus}
+            onTaskClick={(task) => setDetailTask(task)}
+          />
+        </TabsContent>
 
-          <TabsContent value="all" className="mt-4">
-            <TaskList
-              tasks={tasks}
-              teamMembers={teamMembers}
-              onToggleStatus={handleToggleStatus}
-              onTaskClick={(task) => setDetailTask(task)}
-              selectable
-              selectedIds={selectedIds}
-              onSelectChange={(id, selected) =>
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (selected) next.add(id);
-                  else next.delete(id);
-                  return next;
-                })
-              }
-            />
-          </TabsContent>
+        <TabsContent value="todo" className="mt-4">
+          <TaskList
+            tasks={filterByStatus("todo")}
+            teamMembers={placeholderTeam}
+            onToggleStatus={handleToggleStatus}
+            onTaskClick={(task) => setDetailTask(task)}
+            emptyMessage="No to-do tasks"
+          />
+        </TabsContent>
 
-          <TabsContent value="todo" className="mt-4">
-            <TaskList
-              tasks={filterByStatus("todo")}
-              teamMembers={teamMembers}
-              onToggleStatus={handleToggleStatus}
-              onTaskClick={(task) => setDetailTask(task)}
-              selectable
-              selectedIds={selectedIds}
-              onSelectChange={(id, selected) =>
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (selected) next.add(id);
-                  else next.delete(id);
-                  return next;
-                })
-              }
-              emptyMessage="No to-do tasks"
-            />
-          </TabsContent>
+        <TabsContent value="in_progress" className="mt-4">
+          <TaskList
+            tasks={filterByStatus("in_progress")}
+            teamMembers={placeholderTeam}
+            onToggleStatus={handleToggleStatus}
+            onTaskClick={(task) => setDetailTask(task)}
+            emptyMessage="No in-progress tasks"
+          />
+        </TabsContent>
 
-          <TabsContent value="in_progress" className="mt-4">
-            <TaskList
-              tasks={filterByStatus("in_progress")}
-              teamMembers={teamMembers}
-              onToggleStatus={handleToggleStatus}
-              onTaskClick={(task) => setDetailTask(task)}
-              selectable
-              selectedIds={selectedIds}
-              onSelectChange={(id, selected) =>
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (selected) next.add(id);
-                  else next.delete(id);
-                  return next;
-                })
-              }
-              emptyMessage="No in-progress tasks"
-            />
-          </TabsContent>
-
-          <TabsContent value="done" className="mt-4">
-            <TaskList
-              tasks={filterByStatus("done")}
-              teamMembers={teamMembers}
-              onToggleStatus={handleToggleStatus}
-              onTaskClick={(task) => setDetailTask(task)}
-              selectable
-              selectedIds={selectedIds}
-              onSelectChange={(id, selected) =>
-                setSelectedIds((prev) => {
-                  const next = new Set(prev);
-                  if (selected) next.add(id);
-                  else next.delete(id);
-                  return next;
-                })
-              }
-              emptyMessage="No completed tasks"
-            />
-          </TabsContent>
-        </Tabs>
-      )}
+        <TabsContent value="done" className="mt-4">
+          <TaskList
+            tasks={filterByStatus("done")}
+            teamMembers={placeholderTeam}
+            onToggleStatus={handleToggleStatus}
+            onTaskClick={(task) => setDetailTask(task)}
+            emptyMessage="No completed tasks"
+          />
+        </TabsContent>
+      </Tabs>
 
       <TaskForm
         open={formOpen && !templateDefaults}
         onOpenChange={setFormOpen}
-        clients={clients}
-        teamMembers={teamMembers}
+        clients={placeholderClients}
+        teamMembers={placeholderTeam}
         onSubmit={(task) => {
-          void createTask(task, "manual");
+          const newTask: Task & { clients?: { name: string } | null } = {
+            id: `t${Date.now()}`,
+            ...task,
+            assigned_role: task.assigned_role ?? null,
+            status: "todo",
+            intelligence_id: null,
+            workflow_template_id: null,
+            source: "manual",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            clients: placeholderClients.find((c) => c.id === task.client_id)
+              ? { name: placeholderClients.find((c) => c.id === task.client_id)!.name }
+              : null,
+          };
+          setTasks((prev) => [newTask, ...prev]);
         }}
       />
 
       {detailTask && (
         <TaskDetailDialog
           open={!!detailTask}
-          onOpenChange={(open) => {
-            if (!open) setDetailTask(null);
-          }}
+          onOpenChange={(open) => { if (!open) setDetailTask(null); }}
           task={detailTask}
           assigneeName={detailTask.assignee_id ? memberMap.get(detailTask.assignee_id) : undefined}
           onEdit={() => {
@@ -403,15 +166,27 @@ export default function TasksPage() {
 
       <TaskForm
         open={!!editingTask}
-        onOpenChange={(open) => {
-          if (!open) setEditingTask(null);
-        }}
-        clients={clients}
-        teamMembers={teamMembers}
+        onOpenChange={(open) => { if (!open) setEditingTask(null); }}
+        clients={placeholderClients}
+        teamMembers={placeholderTeam}
         task={editingTask}
         onSubmit={(updated) => {
           if (editingTask) {
-            void updateTask(editingTask.id, updated);
+            setTasks((prev) =>
+              prev.map((t) =>
+                t.id === editingTask.id
+                  ? {
+                      ...t,
+                      ...updated,
+                      assigned_role: updated.assigned_role ?? null,
+                      updated_at: new Date().toISOString(),
+                      clients: placeholderClients.find((c) => c.id === updated.client_id)
+                        ? { name: placeholderClients.find((c) => c.id === updated.client_id)!.name }
+                        : t.clients,
+                    }
+                  : t
+              )
+            );
           }
           setEditingTask(null);
         }}
@@ -434,8 +209,8 @@ export default function TasksPage() {
             setFormOpen(open);
             if (!open) setTemplateDefaults(null);
           }}
-          clients={clients}
-          teamMembers={teamMembers}
+          clients={placeholderClients}
+          teamMembers={placeholderTeam}
           defaults={{
             title: templateDefaults.title,
             description: templateDefaults.description ?? undefined,
@@ -443,50 +218,25 @@ export default function TasksPage() {
             assigned_role: templateDefaults.assigned_role,
           }}
           onSubmit={(task) => {
-            void createTask(task, "workflow");
+            const newTask: Task & { clients?: { name: string } | null } = {
+              id: `t${Date.now()}`,
+              ...task,
+              assigned_role: task.assigned_role ?? null,
+              status: "todo",
+              intelligence_id: null,
+              workflow_template_id: null,
+              source: "workflow",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              clients: placeholderClients.find((c) => c.id === task.client_id)
+                ? { name: placeholderClients.find((c) => c.id === task.client_id)!.name }
+                : null,
+            };
+            setTasks((prev) => [newTask, ...prev]);
             setTemplateDefaults(null);
           }}
         />
       )}
-
-      <BulkActionBar
-        selectedCount={selectedIds.size}
-        onMarkDone={() => {
-          void (async () => {
-            setPageError(null);
-            const previous = tasks;
-            const ids = new Set(selectedIds);
-            setTasks((prev) =>
-              prev.map((task) => (ids.has(task.id) ? { ...task, status: "done" as TaskStatus } : task))
-            );
-            setSelectedIds(new Set());
-
-            try {
-              await Promise.all(Array.from(ids).map((id) => patchTask(id, { status: "done" })));
-            } catch (error) {
-              setTasks(previous);
-              setPageError(error instanceof Error ? error.message : "Failed to update selected tasks");
-            }
-          })();
-        }}
-        onDelete={() => {
-          void (async () => {
-            setPageError(null);
-            const previous = tasks;
-            const ids = new Set(selectedIds);
-            setTasks((prev) => prev.filter((task) => !ids.has(task.id)));
-            setSelectedIds(new Set());
-
-            try {
-              await Promise.all(Array.from(ids).map((id) => deleteTask(id)));
-            } catch (error) {
-              setTasks(previous);
-              setPageError(error instanceof Error ? error.message : "Failed to delete selected tasks");
-            }
-          })();
-        }}
-        onClearSelection={() => setSelectedIds(new Set())}
-      />
     </div>
   );
 }

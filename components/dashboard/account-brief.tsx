@@ -169,7 +169,7 @@ interface AccountBriefProps {
 }
 
 export function AccountBrief({ clientId, clientName, intelligence }: AccountBriefProps) {
-  const { accountBriefs, setAccountBriefs, getPrompt, getRequestHeaders } = useTeamContext();
+  const { accountBriefs, setAccountBriefs, getPrompt } = useTeamContext();
 
   // Add-entry dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -331,10 +331,7 @@ export function AccountBrief({ clientId, clientName, intelligence }: AccountBrie
     try {
       const res = await fetch(`/api/clients/${clientId}/generate-brief`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           intelligence,
           clientName: clientName ?? `Account ${clientId}`,

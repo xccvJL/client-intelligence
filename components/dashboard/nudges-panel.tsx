@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Card,
@@ -20,13 +20,13 @@ const priorityColors: Record<string, string> = {
 };
 
 export function NudgesPanel() {
-  const { getPrompt, getRequestHeaders } = useTeamContext();
+  const { getPrompt } = useTeamContext();
   const [nudges, setNudges] = useState<Nudge[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchNudges = useCallback(async () => {
+  async function fetchNudges() {
     setLoading(true);
     setError(null);
     setDismissed(new Set());
@@ -34,10 +34,7 @@ export function NudgesPanel() {
     try {
       const res = await fetch("/api/nudges", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getRequestHeaders(),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ systemPrompt: getPrompt("nudges") }),
       });
       const json = await res.json();
@@ -53,11 +50,11 @@ export function NudgesPanel() {
     } finally {
       setLoading(false);
     }
-  }, [getPrompt, getRequestHeaders]);
+  }
 
   useEffect(() => {
     fetchNudges();
-  }, [fetchNudges]);
+  }, []);
 
   function dismiss(id: string) {
     setDismissed((prev) => new Set(prev).add(id));

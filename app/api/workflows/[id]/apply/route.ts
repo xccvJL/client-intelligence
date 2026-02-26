@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
 import type { WorkflowStep } from "@/lib/types";
-import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
 
 // POST /api/workflows/:id/apply — apply a workflow template to a client.
 // Creates one task per step with calculated due dates and role assignments.
@@ -13,7 +12,6 @@ export async function POST(
   const supabase = createServerClient();
 
   try {
-    const { teamMember } = await requireAuth(request);
     const body = await request.json();
     const { client_id } = body;
 
@@ -23,8 +21,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    await requireClientAccess(teamMember.id, client_id);
 
     // Fetch the workflow template
     const { data: template, error: templateError } = await supabase
@@ -78,9 +74,6 @@ export async function POST(
       { status: 201 }
     );
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error(`POST /api/workflows/${id}/apply failed:`, err);
     return NextResponse.json(
       { error: "Failed to apply workflow template" },

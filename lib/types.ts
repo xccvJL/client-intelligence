@@ -10,7 +10,6 @@ export interface Client {
   domain: string;
   contacts: ClientContact[];
   tags: string[];
-  notes?: string | null;
   status: AccountStatus;
   created_at: string;
   updated_at: string;
@@ -28,7 +27,6 @@ export type TeamRole = "sales" | "onboarding" | "account_manager" | "specialist"
 
 export interface TeamMember {
   id: string;
-  auth_user_id?: string | null;
   name: string;
   email: string;
   role: TeamRole;

@@ -31,7 +31,7 @@ interface ApplyWorkflowDialogProps {
   clients: Client[];
   defaultTemplateId?: string;
   defaultClientId?: string;
-  onApply: (templateId: string, clientId: string) => Promise<void>;
+  onApply: (templateId: string, clientId: string) => void;
 }
 
 export function ApplyWorkflowDialog({
@@ -46,8 +46,6 @@ export function ApplyWorkflowDialog({
   const [templateId, setTemplateId] = useState(defaultTemplateId ?? "");
   const [clientId, setClientId] = useState(defaultClientId ?? "");
   const [applied, setApplied] = useState(false);
-  const [applying, setApplying] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Reset state when dialog opens
   const handleOpenChange = (isOpen: boolean) => {
@@ -55,24 +53,14 @@ export function ApplyWorkflowDialog({
       setTemplateId(defaultTemplateId ?? "");
       setClientId(defaultClientId ?? "");
       setApplied(false);
-      setApplying(false);
-      setError(null);
     }
     onOpenChange(isOpen);
   };
 
-  async function handleApply() {
+  function handleApply() {
     if (!templateId || !clientId) return;
-    setApplying(true);
-    setError(null);
-    try {
-      await onApply(templateId, clientId);
-      setApplied(true);
-    } catch {
-      setError("Failed to apply workflow. Please try again.");
-    } finally {
-      setApplying(false);
-    }
+    onApply(templateId, clientId);
+    setApplied(true);
   }
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
@@ -156,24 +144,19 @@ export function ApplyWorkflowDialog({
               </div>
             )}
 
-            {error && (
-              <p className="text-sm text-red-600">{error}</p>
-            )}
-
             <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => handleOpenChange(false)}
-                disabled={applying}
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleApply}
-                disabled={!templateId || !clientId || applying}
+                disabled={!templateId || !clientId}
               >
-                {applying ? "Applying..." : "Apply Workflow"}
+                Apply Workflow
               </Button>
             </DialogFooter>
           </div>

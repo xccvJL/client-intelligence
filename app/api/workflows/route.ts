@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
-import { AuthError, requireAuth } from "@/lib/auth";
 
 // GET /api/workflows — list all workflow templates.
-export async function GET(request: NextRequest) {
+export async function GET() {
   const supabase = createServerClient();
 
   try {
-    await requireAuth(request);
     const { data, error } = await supabase
       .from("workflow_templates")
       .select("*")
@@ -17,9 +15,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error("GET /api/workflows failed:", err);
     return NextResponse.json(
       { error: "Failed to fetch workflow templates" },
@@ -33,7 +28,6 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
 
   try {
-    await requireAuth(request);
     const body = await request.json();
     const { name, description, steps } = body;
 
@@ -58,9 +52,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
-    if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
-    }
     console.error("POST /api/workflows failed:", err);
     return NextResponse.json(
       { error: "Failed to create workflow template" },
