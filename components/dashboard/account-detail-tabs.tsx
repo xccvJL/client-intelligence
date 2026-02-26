@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
@@ -20,18 +20,17 @@ import { ClientTimeline } from "@/components/dashboard/client-timeline";
 import { StakeholderView } from "@/components/dashboard/stakeholder-view";
 import { CalendarPreview } from "@/components/dashboard/calendar-preview";
 import { AccountOverview } from "@/components/dashboard/account-overview";
-import { mockStakeholders } from "@/lib/mock-stakeholders";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type {
   Intelligence,
   ClientHealth,
   HealthAlert,
   Task,
   Deal,
+  Stakeholder,
 } from "@/lib/types";
 
 // Client component wrapper for the account detail tabs.
-// Holds activeTab state so the Overview's "View all" links and the "More"
-// dropdown can programmatically switch tabs.
 
 interface IntelligenceEntry {
   id: string;
@@ -50,47 +49,6 @@ interface AccountDetailTabsProps {
   intelligenceForAI: Intelligence[];
 }
 
-// Placeholder data for the Overview tab — same pattern as client-health.tsx
-// and client-tasks.tsx which each define their own placeholders.
-
-const placeholderHealth: ClientHealth = {
-  id: "h1",
-  client_id: "1",
-  status: "healthy",
-  satisfaction_score: 8,
-  renewal_date: "2026-06-15",
-  last_positive_signal: "2026-02-10T00:00:00Z",
-  last_negative_signal: null,
-  notes: null,
-  created_at: "2026-01-01",
-  updated_at: "2026-02-10",
-};
-
-const placeholderAlerts: (HealthAlert & { clients?: { name: string } | null })[] = [
-  {
-    id: "a1",
-    client_id: "1",
-    intelligence_id: "i2",
-    alert_type: "risk_topic",
-    severity: "warning",
-    message: "Risk topics detected: capacity, concerns",
-    acknowledged: false,
-    created_at: "2026-02-07T00:00:00Z",
-    clients: { name: "Acme Corp" },
-  },
-];
-
-const placeholderTasks: (Task & { clients?: { name: string } | null })[] = [
-  { id: "t1", client_id: "1", title: "Send updated SOW by Friday", description: null, status: "todo", priority: "high", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-14", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
-  { id: "t2", client_id: "1", title: "Schedule follow-up with VP", description: null, status: "todo", priority: "medium", assignee_id: "tm2", assigned_role: null, due_date: "2026-02-18", intelligence_id: "i1", workflow_template_id: null, source: "auto", created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
-  { id: "t4", client_id: "1", title: "Review resource allocation", description: null, status: "done", priority: "medium", assignee_id: "tm1", assigned_role: null, due_date: "2026-02-10", intelligence_id: "i2", workflow_template_id: null, source: "auto", created_at: "2026-02-07", updated_at: "2026-02-11", clients: { name: "Acme Corp" } },
-];
-
-const placeholderDeals: (Deal & { clients?: { name: string } | null })[] = [
-  { id: "d3", client_id: "1", title: "Acme Corp — Expanded Scope", stage: "proposal", amount: 80000, close_date: "2026-04-01", notes: null, created_by: null, created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
-  { id: "d4", client_id: "1", title: "Acme Corp — Annual Retainer", stage: "active", amount: 120000, close_date: "2026-06-01", notes: null, created_by: null, created_at: "2025-12-01", updated_at: "2026-01-15", clients: { name: "Acme Corp" } },
-];
-
 const secondaryTabs = [
   { value: "timeline", label: "Timeline" },
   { value: "people", label: "People" },
@@ -99,7 +57,37 @@ const secondaryTabs = [
   { value: "team", label: "Team" },
 ];
 
-const secondaryTabValues = new Set(secondaryTabs.map((t) => t.value));
+const secondaryTabValues = new Set(secondaryTabs.map((tab) => tab.value));
+
+function createDefaultHealth(clientId: string): ClientHealth {
+  const timestamp = new Date().toISOString();
+  return {
+    id: `health-${clientId}`,
+    client_id: clientId,
+    status: "healthy",
+    satisfaction_score: 7,
+    renewal_date: null,
+    last_positive_signal: null,
+    last_negative_signal: null,
+    notes: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+}
+
+function normalizeHealth(clientId: string, health?: Partial<ClientHealth> | null): ClientHealth {
+  const fallback = createDefaultHealth(clientId);
+  if (!health) return fallback;
+
+  return {
+    ...fallback,
+    ...health,
+    id: health.id ?? fallback.id,
+    client_id: health.client_id ?? fallback.client_id,
+    created_at: health.created_at ?? fallback.created_at,
+    updated_at: health.updated_at ?? fallback.updated_at,
+  };
+}
 
 export function AccountDetailTabs({
   clientId,
@@ -107,10 +95,79 @@ export function AccountDetailTabs({
   intelligence,
   intelligenceForAI,
 }: AccountDetailTabsProps) {
+  const { getRequestHeaders } = useTeamContext();
   const [activeTab, setActiveTab] = useState("overview");
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [health, setHealth] = useState<ClientHealth>(createDefaultHealth(clientId));
+  const [alerts, setAlerts] = useState<(HealthAlert & { clients?: { name: string } | null })[]>([]);
+  const [tasks, setTasks] = useState<(Task & { clients?: { name: string } | null })[]>([]);
+  const [deals, setDeals] = useState<(Deal & { clients?: { name: string } | null })[]>([]);
 
-  const stakeholders = mockStakeholders[clientId] ?? [];
+  const stakeholders: Stakeholder[] = [];
   const isSecondaryActive = secondaryTabValues.has(activeTab);
+
+  useEffect(() => {
+    async function loadOverviewData() {
+      setOverviewLoading(true);
+      setOverviewError(null);
+
+      try {
+        const [healthRes, alertsRes, tasksRes, dealsRes] = await Promise.all([
+          fetch(`/api/clients/${clientId}/health`, { headers: getRequestHeaders() }),
+          fetch(`/api/alerts?client_id=${clientId}&acknowledged=false`, {
+            headers: getRequestHeaders(),
+          }),
+          fetch(`/api/tasks?client_id=${clientId}`, { headers: getRequestHeaders() }),
+          fetch(`/api/deals?client_id=${clientId}`, { headers: getRequestHeaders() }),
+        ]);
+
+        const healthJson = (await healthRes.json()) as { data?: Partial<ClientHealth>; error?: string };
+        const alertsJson = (await alertsRes.json()) as {
+          data?: (HealthAlert & { clients?: { name: string } | null })[];
+          error?: string;
+        };
+        const tasksJson = (await tasksRes.json()) as {
+          data?: (Task & { clients?: { name: string } | null })[];
+          error?: string;
+        };
+        const dealsJson = (await dealsRes.json()) as {
+          data?: (Deal & { clients?: { name: string } | null })[];
+          error?: string;
+        };
+
+        if (!healthRes.ok) {
+          throw new Error(healthJson.error ?? "Failed to load health");
+        }
+        if (!alertsRes.ok) {
+          throw new Error(alertsJson.error ?? "Failed to load alerts");
+        }
+        if (!tasksRes.ok) {
+          throw new Error(tasksJson.error ?? "Failed to load tasks");
+        }
+        if (!dealsRes.ok) {
+          throw new Error(dealsJson.error ?? "Failed to load deals");
+        }
+
+        setHealth(normalizeHealth(clientId, healthJson.data));
+        setAlerts(alertsJson.data ?? []);
+        setTasks(tasksJson.data ?? []);
+        setDeals(dealsJson.data ?? []);
+      } catch (error) {
+        setOverviewError(
+          error instanceof Error ? error.message : "Failed to load account overview"
+        );
+        setHealth(createDefaultHealth(clientId));
+        setAlerts([]);
+        setTasks([]);
+        setDeals([]);
+      } finally {
+        setOverviewLoading(false);
+      }
+    }
+
+    void loadOverviewData();
+  }, [clientId, getRequestHeaders]);
 
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -122,7 +179,6 @@ export function AccountDetailTabs({
         <TabsTrigger value="brief">Brief</TabsTrigger>
         <TabsTrigger value="ask-ai">Ask AI</TabsTrigger>
 
-        {/* "More" dropdown — plain button styled like a tab trigger */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -152,18 +208,23 @@ export function AccountDetailTabs({
         </DropdownMenu>
       </TabsList>
 
-      {/* ── Tab content panels ── */}
-
       <TabsContent value="overview">
-        <AccountOverview
-          health={placeholderHealth}
-          alerts={placeholderAlerts}
-          tasks={placeholderTasks}
-          intelligence={intelligence}
-          deals={placeholderDeals}
-          stakeholders={stakeholders}
-          onTabChange={setActiveTab}
-        />
+        {overviewLoading ? (
+          <p className="text-sm text-muted-foreground mt-4">Loading overview...</p>
+        ) : (
+          <div className="space-y-3 mt-4">
+            {overviewError && <p className="text-sm text-destructive">{overviewError}</p>}
+            <AccountOverview
+              health={health}
+              alerts={alerts}
+              tasks={tasks}
+              intelligence={intelligence}
+              deals={deals}
+              stakeholders={stakeholders}
+              onTabChange={setActiveTab}
+            />
+          </div>
+        )}
       </TabsContent>
 
       <TabsContent value="intelligence" className="space-y-4 mt-4">

@@ -1,38 +1,232 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DealCard } from "./deal-card";
 import { DealForm } from "./deal-form";
 import { DealDetailDialog } from "./deal-detail-dialog";
+import { useTeamContext } from "./team-context";
 import type { Deal, DealStage, Client } from "@/lib/types";
 
 // Shows deals for a specific client inside the client detail page.
-// Includes stage-change buttons and an "Add Deal" button.
 
 interface ClientDealsProps {
   clientId: string;
 }
 
-const placeholderClients: Client[] = [
-  { id: "1", name: "Acme Corp", domain: "acme.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-];
-
-const placeholderDeals: (Deal & { clients?: { name: string } | null })[] = [
-  { id: "d3", client_id: "1", title: "Acme Corp — Expanded Scope", stage: "proposal", amount: 80000, close_date: "2026-04-01", notes: null, created_by: null, created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
-  { id: "d4", client_id: "1", title: "Acme Corp — Annual Retainer", stage: "active", amount: 120000, close_date: "2026-06-01", notes: null, created_by: null, created_at: "2025-12-01", updated_at: "2026-01-15", clients: { name: "Acme Corp" } },
-];
+type DealWithClient = Deal & { clients?: { name: string } | null };
 
 export function ClientDeals({ clientId }: ClientDealsProps) {
-  const [deals, setDeals] = useState(placeholderDeals);
+  const { getRequestHeaders } = useTeamContext();
+  const [deals, setDeals] = useState<DealWithClient[]>([]);
+  const [client, setClient] = useState<Client | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [detailDeal, setDetailDeal] = useState<(Deal & { clients?: { name: string } | null }) | null>(null);
-  const [editingDeal, setEditingDeal] = useState<(Deal & { clients?: { name: string } | null }) | null>(null);
+  const [detailDeal, setDetailDeal] = useState<DealWithClient | null>(null);
+  const [editingDeal, setEditingDeal] = useState<DealWithClient | null>(null);
+
+  const formClients = useMemo(() => (client ? [client] : []), [client]);
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      setPageError(null);
+
+      try {
+        const [dealsRes, clientRes] = await Promise.all([
+          fetch(`/api/deals?client_id=${clientId}`, { headers: getRequestHeaders() }),
+          fetch(`/api/clients/${clientId}`, { headers: getRequestHeaders() }),
+        ]);
+
+        const dealsJson = (await dealsRes.json()) as { data?: DealWithClient[]; error?: string };
+        const clientJson = (await clientRes.json()) as { data?: Client; error?: string };
+
+        if (!dealsRes.ok) {
+          throw new Error(dealsJson.error ?? "Failed to load deals");
+        }
+        if (!clientRes.ok) {
+          throw new Error(clientJson.error ?? "Failed to load account details");
+        }
+
+        setDeals(dealsJson.data ?? []);
+        setClient(clientJson.data ?? null);
+      } catch (error) {
+        setDeals([]);
+        setClient(null);
+        setPageError(error instanceof Error ? error.message : "Failed to load deals");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadData();
+  }, [clientId, getRequestHeaders]);
+
+  async function patchDeal(dealId: string, updates: Record<string, unknown>) {
+    const res = await fetch(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...getRequestHeaders(),
+      },
+      body: JSON.stringify(updates),
+    });
+
+    const json = (await res.json()) as { data?: Deal; error?: string };
+    if (!res.ok || !json.data) {
+      throw new Error(json.error ?? "Failed to update deal");
+    }
+
+    return json.data;
+  }
+
+  function withClientName(deal: Deal): DealWithClient {
+    return {
+      ...deal,
+      clients: {
+        name: client?.name ?? "Unknown",
+      },
+    };
+  }
 
   function handleStageChange(dealId: string, newStage: DealStage) {
+    setPageError(null);
+    const previous = deals;
+
     setDeals((prev) =>
-      prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d))
+      prev.map((deal) => (deal.id === dealId ? { ...deal, stage: newStage } : deal))
     );
+
+    void (async () => {
+      try {
+        const updated = await patchDeal(dealId, { stage: newStage });
+        setDeals((prev) =>
+          prev.map((deal) =>
+            deal.id === dealId
+              ? {
+                  ...deal,
+                  ...updated,
+                  clients: deal.clients ?? { name: client?.name ?? "Unknown" },
+                }
+              : deal
+          )
+        );
+      } catch (error) {
+        setDeals(previous);
+        setPageError(error instanceof Error ? error.message : "Failed to move deal");
+      }
+    })();
+  }
+
+  async function handleCreateDeal(deal: {
+    client_id: string;
+    title: string;
+    stage: DealStage;
+    amount: number | null;
+    close_date: string;
+    notes: string;
+  }) {
+    setPageError(null);
+
+    const optimisticId = `deal-optimistic-${Date.now()}`;
+    const optimisticDeal: DealWithClient = {
+      id: optimisticId,
+      client_id: deal.client_id,
+      title: deal.title,
+      stage: deal.stage,
+      amount: deal.amount,
+      close_date: deal.close_date || null,
+      notes: deal.notes || null,
+      created_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      clients: { name: client?.name ?? "Unknown" },
+    };
+
+    setDeals((prev) => [optimisticDeal, ...prev]);
+
+    try {
+      const res = await fetch("/api/deals", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
+        body: JSON.stringify(deal),
+      });
+
+      const json = (await res.json()) as { data?: Deal; error?: string };
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? "Failed to create deal");
+      }
+
+      setDeals((prev) =>
+        prev.map((item) =>
+          item.id === optimisticId ? withClientName(json.data!) : item
+        )
+      );
+    } catch (error) {
+      setDeals((prev) => prev.filter((item) => item.id !== optimisticId));
+      setPageError(error instanceof Error ? error.message : "Failed to create deal");
+    }
+  }
+
+  async function handleUpdateDeal(
+    dealId: string,
+    updates: {
+      client_id: string;
+      title: string;
+      stage: DealStage;
+      amount: number | null;
+      close_date: string;
+      notes: string;
+    }
+  ) {
+    setPageError(null);
+    const previous = deals;
+
+    setDeals((prev) =>
+      prev.map((deal) =>
+        deal.id === dealId
+          ? {
+              ...deal,
+              ...updates,
+              close_date: updates.close_date || null,
+              notes: updates.notes || null,
+              clients: deal.clients ?? { name: client?.name ?? "Unknown" },
+            }
+          : deal
+      )
+    );
+
+    try {
+      const updated = await patchDeal(dealId, {
+        title: updates.title,
+        stage: updates.stage,
+        amount: updates.amount,
+        close_date: updates.close_date || null,
+        notes: updates.notes || null,
+      });
+      setDeals((prev) =>
+        prev.map((deal) =>
+          deal.id === dealId
+            ? {
+                ...deal,
+                ...updated,
+                clients: deal.clients ?? { name: client?.name ?? "Unknown" },
+              }
+            : deal
+        )
+      );
+    } catch (error) {
+      setDeals(previous);
+      setPageError(error instanceof Error ? error.message : "Failed to update deal");
+    }
+  }
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading deals...</p>;
   }
 
   return (
@@ -46,6 +240,8 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
         </Button>
       </div>
 
+      {pageError && <p className="text-sm text-destructive">{pageError}</p>}
+
       <div className="space-y-2">
         {deals.length === 0 ? (
           <p className="text-sm text-muted-foreground py-8 text-center">
@@ -57,7 +253,7 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
               key={deal.id}
               deal={deal}
               onStageChange={handleStageChange}
-              onClick={(d) => setDetailDeal(d)}
+              onClick={(selectedDeal) => setDetailDeal(selectedDeal)}
             />
           ))
         )}
@@ -66,28 +262,19 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
       <DealForm
         open={formOpen}
         onOpenChange={setFormOpen}
-        clients={placeholderClients}
+        clients={formClients}
         defaultClientId={clientId}
         onSubmit={(deal) => {
-          const newDeal: Deal & { clients?: { name: string } | null } = {
-            id: `d${Date.now()}`,
-            ...deal,
-            notes: deal.notes || null,
-            amount: deal.amount,
-            close_date: deal.close_date || null,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            clients: null,
-          };
-          setDeals((prev) => [newDeal, ...prev]);
+          void handleCreateDeal(deal);
         }}
       />
 
       {detailDeal && (
         <DealDetailDialog
           open={!!detailDeal}
-          onOpenChange={(open) => { if (!open) setDetailDeal(null); }}
+          onOpenChange={(open) => {
+            if (!open) setDetailDeal(null);
+          }}
           deal={detailDeal}
           onEdit={() => {
             setEditingDeal(detailDeal);
@@ -98,20 +285,15 @@ export function ClientDeals({ clientId }: ClientDealsProps) {
 
       <DealForm
         open={!!editingDeal}
-        onOpenChange={(open) => { if (!open) setEditingDeal(null); }}
-        clients={placeholderClients}
+        onOpenChange={(open) => {
+          if (!open) setEditingDeal(null);
+        }}
+        clients={formClients}
         defaultClientId={clientId}
         deal={editingDeal}
-        onSubmit={(updated) => {
-          if (editingDeal) {
-            setDeals((prev) =>
-              prev.map((d) =>
-                d.id === editingDeal.id
-                  ? { ...d, ...updated, notes: updated.notes || null, close_date: updated.close_date || null, updated_at: new Date().toISOString() }
-                  : d
-              )
-            );
-          }
+        onSubmit={(updatedDeal) => {
+          if (!editingDeal) return;
+          void handleUpdateDeal(editingDeal.id, updatedDeal);
           setEditingDeal(null);
         }}
       />

@@ -14,6 +14,8 @@ async function processBatch(
   _source: KnowledgeSource,
   _clients: Client[]
 ): Promise<ProcessResult> {
+  void _source;
+  void _clients;
   // Manual notes are created through the API, not by a cron job.
   // Nothing to process automatically.
   return { processed: 0, errors: 0, error_messages: [] };

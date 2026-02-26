@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { DraftResponse, Intelligence } from "@/lib/types";
 
 interface DraftResponseDialogProps {
@@ -30,6 +31,7 @@ export function DraftResponseDialog({
   entryId,
   intelligence,
 }: DraftResponseDialogProps) {
+  const { getRequestHeaders } = useTeamContext();
   const [draft, setDraft] = useState<DraftResponse | null>(null);
   const [editedBody, setEditedBody] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,10 @@ export function DraftResponseDialog({
     try {
       const res = await fetch(`/api/clients/${clientId}/draft-response`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
         body: JSON.stringify({ intelligence, entryId, clientName }),
       });
 

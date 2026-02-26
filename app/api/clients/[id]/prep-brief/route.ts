@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePrepBrief } from "@/lib/gemini";
-import type { Intelligence } from "@/lib/types";
+import { fetchClientIntelligence } from "@/lib/intelligence";
+import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
 
 // POST /api/clients/[id]/prep-brief — generate a meeting prep brief
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await params;
+  const { id } = await params;
 
   try {
-    const { intelligence, clientName, systemPrompt } = (await request.json()) as {
-      intelligence: Intelligence[];
+    const { teamMember } = await requireAuth(request);
+    await requireClientAccess(teamMember.id, id);
+
+    const { clientName, systemPrompt } = (await request.json()) as {
       clientName: string;
       systemPrompt?: string;
     };
@@ -23,7 +26,8 @@ export async function POST(
       );
     }
 
-    const brief = await generatePrepBrief(intelligence ?? [], clientName, systemPrompt);
+    const intelligence = await fetchClientIntelligence(id);
+    const brief = await generatePrepBrief(intelligence, clientName, systemPrompt);
 
     if (!brief) {
       return NextResponse.json(
@@ -34,6 +38,9 @@ export async function POST(
 
     return NextResponse.json({ data: brief });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("POST /api/clients/[id]/prep-brief failed:", err);
     return NextResponse.json(
       { error: "Failed to generate prep brief" },

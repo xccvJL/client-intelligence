@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -47,34 +47,17 @@ export function DealForm({
   deal,
   onSubmit,
 }: DealFormProps) {
-  const [title, setTitle] = useState("");
-  const [stage, setStage] = useState<DealStage>("lead");
-  const [amount, setAmount] = useState("");
-  const [closeDate, setCloseDate] = useState("");
-  const [notes, setNotes] = useState("");
-  const [clientId, setClientId] = useState(defaultClientId ?? "");
+  const [title, setTitle] = useState(() => deal?.title ?? "");
+  const [stage, setStage] = useState<DealStage>(() => deal?.stage ?? "lead");
+  const [amount, setAmount] = useState(() =>
+    deal?.amount != null ? String(deal.amount) : ""
+  );
+  const [closeDate, setCloseDate] = useState(() => deal?.close_date ?? "");
+  const [notes, setNotes] = useState(() => deal?.notes ?? "");
+  const [clientId, setClientId] = useState(() => deal?.client_id ?? defaultClientId ?? "");
 
   const isEditing = !!deal;
-
-  useEffect(() => {
-    if (open) {
-      if (deal) {
-        setTitle(deal.title);
-        setStage(deal.stage);
-        setAmount(deal.amount != null ? String(deal.amount) : "");
-        setCloseDate(deal.close_date ?? "");
-        setNotes(deal.notes ?? "");
-        setClientId(deal.client_id);
-      } else {
-        setTitle("");
-        setStage("lead");
-        setAmount("");
-        setCloseDate("");
-        setNotes("");
-        setClientId(defaultClientId ?? "");
-      }
-    }
-  }, [open, defaultClientId, deal]);
+  const formKey = `${open ? "open" : "closed"}:${deal?.id ?? "new"}:${defaultClientId ?? ""}`;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -93,7 +76,7 @@ export function DealForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent key={formKey} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Deal" : "Add Deal"}</DialogTitle>
         </DialogHeader>

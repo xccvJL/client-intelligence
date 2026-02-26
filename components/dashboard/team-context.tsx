@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { TeamMember, AccountMember, WorkflowTemplate, AccountBrief, IncomingLead, Notification } from "@/lib/types";
 import { mockNotifications } from "@/lib/mock-notifications";
 import { defaultPromptsMap } from "@/lib/default-prompts";
+import { createBrowserClient } from "@/lib/supabase";
 
 // This context holds the "current user" — the team member who is
 // currently using the app. Since there's no login yet, we simulate
@@ -16,79 +17,7 @@ const placeholderTeamMembers: TeamMember[] = [
   { id: "tm2", name: "Mike Torres", email: "mike@thrive.com", role: "sales", gmail_watch_label: null, created_at: "" },
 ];
 
-// Placeholder account memberships — maps who has access to which accounts.
-// Sarah (tm1) → Acme Corp (1), Globex Inc (2)
-// Mike (tm2)  → Acme Corp (1), Umbrella Co (4), Initech (3)
-const placeholderAccountMembers: AccountMember[] = [
-  { id: "am1", client_id: "1", team_member_id: "tm1", role: "owner", created_at: "" },
-  { id: "am2", client_id: "2", team_member_id: "tm1", role: "member", created_at: "" },
-  { id: "am3", client_id: "1", team_member_id: "tm2", role: "member", created_at: "" },
-  { id: "am4", client_id: "4", team_member_id: "tm2", role: "owner", created_at: "" },
-  { id: "am5", client_id: "3", team_member_id: "tm2", role: "member", created_at: "" },
-];
-
-// Pre-built Thrive Local Onboarding template — shared across workflows and tasks
-const defaultTemplates: WorkflowTemplate[] = [
-  {
-    id: "wf-thrive-onboarding",
-    name: "Thrive Local Onboarding",
-    description:
-      "Standard onboarding workflow for new Thrive Local clients. Covers the full handoff from Sales through Account Management.",
-    steps: [
-      { title: "Mark Thrive Local status on deal", description: "Update the deal stage to reflect Thrive Local enrollment.", assigned_role: "sales", priority: "medium", due_in_days: 0, order: 1 },
-      { title: "Set up project overview, add Tim & Ralph", description: "Create the project in the system and add key team members.", assigned_role: "onboarding", priority: "high", due_in_days: 1, order: 2 },
-      { title: "Send intro email with Calendly links", description: "Send the client an introduction email with scheduling links for their onboarding calls.", assigned_role: "sales", priority: "high", due_in_days: 1, order: 3 },
-      { title: "Alert specialists when GBP is connected", description: "Notify the specialist team once the client's Google Business Profile is connected.", assigned_role: "onboarding", priority: "medium", due_in_days: 3, order: 4 },
-      { title: "Monitor status, help client connect platforms", description: "Track progress and assist the client with connecting their various platforms and accounts.", assigned_role: "onboarding", priority: "medium", due_in_days: 7, order: 5 },
-      { title: "Handoff to AM if no movement", description: "If the client hasn't made progress, escalate to the Account Manager for direct outreach.", assigned_role: "account_manager", priority: "low", due_in_days: 14, order: 6 },
-    ],
-    created_at: "2026-01-15T00:00:00Z",
-    updated_at: "2026-01-15T00:00:00Z",
-  },
-];
-
-// Pre-built Acme Corp account brief with realistic entries from existing intelligence
-const defaultAccountBriefs: AccountBrief[] = [
-  {
-    client_id: "1",
-    client_name: "Acme Corp",
-    sections: [
-      {
-        type: "key_context",
-        entries: [
-          { content: "Q2 renewal confirmed; expanded scope for next fiscal year", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
-          { content: "Client expressed satisfaction with recent deliverables and timeline", source_label: "Email — Feb 3, 2026", intelligence_id: "3" },
-        ],
-      },
-      {
-        type: "decisions",
-        entries: [
-          { content: "Moving forward with expanded scope; SOW update in progress", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
-        ],
-      },
-      {
-        type: "budgets",
-        entries: [
-          { content: "$120K retainer + $80K expansion budget for next fiscal year", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
-        ],
-      },
-      {
-        type: "key_people",
-        entries: [
-          { content: "Jane Smith — VP of Operations, primary decision-maker", source_label: "Email — Feb 10, 2026", intelligence_id: "1" },
-          { content: "Bob Johnson — Project Manager, flagged capacity concerns", source_label: "Transcript — Feb 7, 2026", intelligence_id: "2" },
-        ],
-      },
-      {
-        type: "risks",
-        entries: [
-          { content: "Team capacity concerns flagged during weekly sync", source_label: "Transcript — Feb 7, 2026", intelligence_id: "2" },
-        ],
-      },
-    ],
-    updated_at: "2026-02-10T00:00:00Z",
-  },
-];
+const fallbackTemplates: WorkflowTemplate[] = [];
 
 interface TeamContextValue {
   currentUser: TeamMember | null;
@@ -113,6 +42,8 @@ interface TeamContextValue {
   setSystemPrompts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   // Returns the custom prompt if one exists, otherwise the default
   getPrompt: (key: string) => string;
+  // Request headers used by client-side API calls.
+  getRequestHeaders: () => Record<string, string>;
   // Helper: returns the client IDs this user can access
   getAccessibleClientIds: (teamMemberId?: string) => string[];
 }
@@ -120,12 +51,15 @@ interface TeamContextValue {
 const TeamContext = createContext<TeamContextValue | null>(null);
 
 export function TeamProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<TeamMember | null>(null);
-  const [teamMembers] = useState<TeamMember[]>(placeholderTeamMembers);
-  const [accountMembers, setAccountMembers] = useState<AccountMember[]>(placeholderAccountMembers);
+  const [currentUser, setCurrentUser] = useState<TeamMember | null>(
+    placeholderTeamMembers[0] ?? null
+  );
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(placeholderTeamMembers);
+  const [accountMembers, setAccountMembers] = useState<AccountMember[]>([]);
   const [showAllAccounts, setShowAllAccounts] = useState(false);
-  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>(defaultTemplates);
-  const [accountBriefs, setAccountBriefs] = useState<AccountBrief[]>(defaultAccountBriefs);
+  const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplate[]>(fallbackTemplates);
+  const [accountBriefs, setAccountBriefs] = useState<AccountBrief[]>([]);
   const [incomingLeads, setIncomingLeads] = useState<IncomingLead[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
   const [systemPrompts, setSystemPrompts] = useState<Record<string, string>>({});
@@ -138,6 +72,108 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     },
     [systemPrompts]
   );
+
+  const getRequestHeaders = useCallback((): Record<string, string> => {
+    if (authToken) {
+      return { authorization: `Bearer ${authToken}` };
+    }
+
+    // Dev fallback for local prototyping when OAuth is not wired.
+    const allowDevHeaderAuth =
+      process.env.NODE_ENV !== "production" &&
+      process.env.NEXT_PUBLIC_ALLOW_DEV_HEADER_AUTH !== "false";
+    if (allowDevHeaderAuth && currentUser?.id) {
+      return { "x-team-member-id": currentUser.id };
+    }
+
+    return {};
+  }, [authToken, currentUser]);
+
+  // Keep auth token in sync with Supabase auth session when available.
+  useEffect(() => {
+    const client = createBrowserClient();
+    void client.auth
+      .getSession()
+      .then(({ data }) => {
+        setAuthToken(data.session?.access_token ?? null);
+      })
+      .catch(() => {
+        setAuthToken(null);
+      });
+
+    const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
+      setAuthToken(session?.access_token ?? null);
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    async function loadTeamMembers() {
+      try {
+        const res = await fetch("/api/team-members", {
+          headers: getRequestHeaders(),
+        });
+        if (!res.ok) return;
+
+        const json = (await res.json()) as { data?: TeamMember[] };
+        const fetchedMembers = json.data ?? [];
+        if (fetchedMembers.length === 0) return;
+
+        setTeamMembers(fetchedMembers);
+        setCurrentUser((prev) => {
+          if (prev && fetchedMembers.some((member) => member.id === prev.id)) {
+            return prev;
+          }
+          return fetchedMembers[0];
+        });
+      } catch {
+        // keep fallback team list when API is unavailable
+      }
+    }
+
+    void loadTeamMembers();
+  }, [getRequestHeaders]);
+
+  useEffect(() => {
+    async function loadAccountMembers() {
+      if (!currentUser?.id) return;
+      try {
+        const params = new URLSearchParams({ team_member_id: currentUser.id });
+        const res = await fetch(`/api/account-members?${params.toString()}`, {
+          headers: getRequestHeaders(),
+        });
+        if (!res.ok) return;
+
+        const json = (await res.json()) as { data?: AccountMember[] };
+        setAccountMembers(json.data ?? []);
+      } catch {
+        setAccountMembers([]);
+      }
+    }
+
+    void loadAccountMembers();
+  }, [currentUser?.id, getRequestHeaders]);
+
+  useEffect(() => {
+    async function loadWorkflowTemplates() {
+      try {
+        const res = await fetch("/api/workflows", {
+          headers: getRequestHeaders(),
+        });
+        if (!res.ok) return;
+
+        const json = (await res.json()) as { data?: WorkflowTemplate[] };
+        setWorkflowTemplates(json.data ?? []);
+      } catch {
+        setWorkflowTemplates([]);
+      }
+    }
+
+    void loadWorkflowTemplates();
+  }, [getRequestHeaders]);
 
   // Add a new lead from the webhook test form.
   // Prepends to the list and also grants the current user access to the new account.
@@ -158,13 +194,6 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       ]);
     }
   }
-
-  // Default to the first team member on mount
-  useEffect(() => {
-    if (!currentUser && teamMembers.length > 0) {
-      setCurrentUser(teamMembers[0]);
-    }
-  }, [currentUser, teamMembers]);
 
   function getAccessibleClientIds(teamMemberId?: string) {
     const memberId = teamMemberId ?? currentUser?.id;
@@ -195,6 +224,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
         systemPrompts,
         setSystemPrompts,
         getPrompt,
+        getRequestHeaders,
         getAccessibleClientIds,
       }}
     >

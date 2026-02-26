@@ -1,15 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader, CardDescription, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PipelineColumn } from "@/components/dashboard/pipeline-column";
 import { DealForm } from "@/components/dashboard/deal-form";
+import { useTeamContext } from "@/components/dashboard/team-context";
 import type { Deal, DealStage, Client } from "@/lib/types";
-
-// Pipeline page — kanban-style view with columns for each deal stage.
-// Summary bar at top shows total pipeline value and counts.
-// Click "Move to [next stage]" on a card to advance it (no drag-and-drop).
 
 const stages: { key: DealStage; label: string }[] = [
   { key: "lead", label: "Lead" },
@@ -19,21 +16,7 @@ const stages: { key: DealStage; label: string }[] = [
   { key: "closed_lost", label: "Closed Lost" },
 ];
 
-const placeholderClients: Client[] = [
-  { id: "1", name: "Acme Corp", domain: "acme.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-  { id: "2", name: "Globex Inc", domain: "globex.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-  { id: "3", name: "Initech", domain: "initech.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-  { id: "4", name: "Umbrella Co", domain: "umbrella.co", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-];
-
-const placeholderDeals: (Deal & { clients?: { name: string } | null })[] = [
-  { id: "d1", client_id: "4", title: "Umbrella Co — Initial Assessment", stage: "lead", amount: 15000, close_date: "2026-03-15", notes: null, created_by: null, created_at: "2026-02-01", updated_at: "2026-02-01", clients: { name: "Umbrella Co" } },
-  { id: "d2", client_id: "2", title: "Globex Q3 Strategy Package", stage: "proposal", amount: 45000, close_date: "2026-03-01", notes: null, created_by: null, created_at: "2026-01-15", updated_at: "2026-02-05", clients: { name: "Globex Inc" } },
-  { id: "d3", client_id: "1", title: "Acme Corp — Expanded Scope", stage: "proposal", amount: 80000, close_date: "2026-04-01", notes: null, created_by: null, created_at: "2026-02-10", updated_at: "2026-02-10", clients: { name: "Acme Corp" } },
-  { id: "d4", client_id: "1", title: "Acme Corp — Annual Retainer", stage: "active", amount: 120000, close_date: "2026-06-01", notes: null, created_by: null, created_at: "2025-12-01", updated_at: "2026-01-15", clients: { name: "Acme Corp" } },
-  { id: "d5", client_id: "3", title: "Initech — Onboarding Support", stage: "active", amount: 25000, close_date: "2026-05-01", notes: null, created_by: null, created_at: "2026-01-20", updated_at: "2026-02-01", clients: { name: "Initech" } },
-  { id: "d6", client_id: "2", title: "Globex Q1 Sprint", stage: "closed_won", amount: 30000, close_date: "2026-01-15", notes: null, created_by: null, created_at: "2025-10-01", updated_at: "2026-01-15", clients: { name: "Globex Inc" } },
-];
+type DealWithClient = Deal & { clients?: { name: string } | null };
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("en-US", {
@@ -44,19 +27,89 @@ function formatCurrency(amount: number) {
 }
 
 export default function PipelinePage() {
-  const [deals, setDeals] = useState(placeholderDeals);
+  const { getRequestHeaders } = useTeamContext();
+  const [deals, setDeals] = useState<DealWithClient[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
 
-  function handleStageChange(dealId: string, newStage: DealStage) {
+  const clientNameById = useMemo(
+    () => new Map(clients.map((client) => [client.id, client.name])),
+    [clients]
+  );
+
+  useEffect(() => {
+    async function loadData() {
+      setLoading(true);
+      setPageError(null);
+      try {
+        const [dealsRes, clientsRes] = await Promise.all([
+          fetch("/api/deals", { headers: getRequestHeaders() }),
+          fetch("/api/clients?status=active", { headers: getRequestHeaders() }),
+        ]);
+
+        const dealsJson = (await dealsRes.json()) as { data?: DealWithClient[]; error?: string };
+        const clientsJson = (await clientsRes.json()) as { data?: Client[]; error?: string };
+
+        if (!dealsRes.ok) throw new Error(dealsJson.error ?? "Failed to load deals");
+        if (!clientsRes.ok) throw new Error(clientsJson.error ?? "Failed to load clients");
+
+        setDeals(dealsJson.data ?? []);
+        setClients(clientsJson.data ?? []);
+      } catch (error) {
+        setPageError(error instanceof Error ? error.message : "Failed to load pipeline");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadData();
+  }, [getRequestHeaders]);
+
+  async function handleStageChange(dealId: string, newStage: DealStage) {
+    setPageError(null);
+    const previous = deals;
     setDeals((prev) =>
-      prev.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d))
+      prev.map((deal) => (deal.id === dealId ? { ...deal, stage: newStage } : deal))
     );
+
+    try {
+      const res = await fetch(`/api/deals/${dealId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
+        body: JSON.stringify({ stage: newStage }),
+      });
+      const json = (await res.json()) as { data?: Deal; error?: string };
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? "Failed to move deal");
+      }
+
+      setDeals((prev) =>
+        prev.map((deal) =>
+          deal.id === dealId
+            ? {
+                ...deal,
+                ...json.data!,
+                clients: deal.clients ?? {
+                  name: clientNameById.get(json.data!.client_id) ?? "Unknown",
+                },
+              }
+            : deal
+        )
+      );
+    } catch (error) {
+      setDeals(previous);
+      setPageError(error instanceof Error ? error.message : "Failed to move deal");
+    }
   }
 
-  // Pipeline value = sum of all non-closed-lost deals
   const pipelineValue = deals
-    .filter((d) => d.stage !== "closed_lost")
-    .reduce((sum, d) => sum + (d.amount ?? 0), 0);
+    .filter((deal) => deal.stage !== "closed_lost")
+    .reduce((sum, deal) => sum + (deal.amount ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -70,67 +123,108 @@ export default function PipelinePage() {
         <Button onClick={() => setFormOpen(true)}>Add Deal</Button>
       </div>
 
-      {/* Summary bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Pipeline Value</CardDescription>
-            <CardTitle className="text-2xl">{formatCurrency(pipelineValue)}</CardTitle>
-          </CardHeader>
-        </Card>
-        {stages.slice(0, 3).map((s) => {
-          const count = deals.filter((d) => d.stage === s.key).length;
-          return (
-            <Card key={s.key}>
+      {pageError && <p className="text-sm text-destructive">{pageError}</p>}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading pipeline...</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
               <CardHeader className="pb-2">
-                <CardDescription>{s.label}</CardDescription>
-                <CardTitle className="text-2xl">{count}</CardTitle>
+                <CardDescription>Pipeline Value</CardDescription>
+                <CardTitle className="text-2xl">{formatCurrency(pipelineValue)}</CardTitle>
               </CardHeader>
             </Card>
-          );
-        })}
-      </div>
+            {stages.slice(0, 3).map((stage) => {
+              const count = deals.filter((deal) => deal.stage === stage.key).length;
+              return (
+                <Card key={stage.key}>
+                  <CardHeader className="pb-2">
+                    <CardDescription>{stage.label}</CardDescription>
+                    <CardTitle className="text-2xl">{count}</CardTitle>
+                  </CardHeader>
+                </Card>
+              );
+            })}
+          </div>
 
-      {/* Kanban columns */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {stages.map((s) => {
-          const stageDeals = deals.filter((d) => d.stage === s.key);
-          const stageValue = stageDeals.reduce(
-            (sum, d) => sum + (d.amount ?? 0),
-            0
-          );
-          return (
-            <PipelineColumn
-              key={s.key}
-              stage={s.key}
-              label={s.label}
-              deals={stageDeals}
-              totalValue={stageValue}
-              onStageChange={handleStageChange}
-            />
-          );
-        })}
-      </div>
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {stages.map((stage) => {
+              const stageDeals = deals.filter((deal) => deal.stage === stage.key);
+              const stageValue = stageDeals.reduce((sum, deal) => sum + (deal.amount ?? 0), 0);
+              return (
+                <PipelineColumn
+                  key={stage.key}
+                  stage={stage.key}
+                  label={stage.label}
+                  deals={stageDeals}
+                  totalValue={stageValue}
+                  onStageChange={handleStageChange}
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <DealForm
         open={formOpen}
         onOpenChange={setFormOpen}
-        clients={placeholderClients}
+        clients={clients}
         onSubmit={(deal) => {
-          const newDeal: Deal & { clients?: { name: string } | null } = {
-            id: `d${Date.now()}`,
-            ...deal,
-            notes: deal.notes || null,
-            amount: deal.amount,
-            close_date: deal.close_date || null,
-            created_by: null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            clients: placeholderClients.find((c) => c.id === deal.client_id)
-              ? { name: placeholderClients.find((c) => c.id === deal.client_id)!.name }
-              : null,
-          };
-          setDeals((prev) => [newDeal, ...prev]);
+          void (async () => {
+            setPageError(null);
+            const optimisticId = `deal-optimistic-${Date.now()}`;
+            const optimisticDeal: DealWithClient = {
+              id: optimisticId,
+              client_id: deal.client_id,
+              title: deal.title,
+              stage: deal.stage,
+              amount: deal.amount,
+              close_date: deal.close_date || null,
+              notes: deal.notes || null,
+              created_by: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              clients: { name: clientNameById.get(deal.client_id) ?? "Unknown" },
+            };
+            setDeals((prev) => [optimisticDeal, ...prev]);
+
+            try {
+              const res = await fetch("/api/deals", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...getRequestHeaders(),
+                },
+                body: JSON.stringify(deal),
+              });
+              const json = (await res.json()) as { data?: Deal; error?: string };
+              if (!res.ok || !json.data) {
+                throw new Error(json.error ?? "Failed to create deal");
+              }
+
+              setDeals((prev) =>
+                prev.map((item) =>
+                  item.id === optimisticId
+                    ? {
+                        ...json.data!,
+                        clients: {
+                          name:
+                            clientNameById.get(json.data!.client_id) ??
+                            optimisticDeal.clients?.name ??
+                            "Unknown",
+                        },
+                      }
+                    : item
+                )
+              );
+            } catch (error) {
+              setDeals((prev) => prev.filter((item) => item.id !== optimisticId));
+              setPageError(error instanceof Error ? error.message : "Failed to create deal");
+            }
+          })();
         }}
       />
     </div>

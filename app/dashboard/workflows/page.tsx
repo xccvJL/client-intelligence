@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WorkflowCard } from "@/components/dashboard/workflow-card";
 import { WorkflowTemplateForm } from "@/components/dashboard/workflow-template-form";
@@ -8,65 +8,150 @@ import { ApplyWorkflowDialog } from "@/components/dashboard/apply-workflow-dialo
 import { useTeamContext } from "@/components/dashboard/team-context";
 import type { WorkflowTemplate, WorkflowStep, Client } from "@/lib/types";
 
-// Workflows page — lists all workflow templates as cards.
-// Includes a pre-built "Thrive Local Onboarding" template and lets users
-// create new templates, edit existing ones, and apply them to clients.
-
-const placeholderClients: Client[] = [
-  { id: "1", name: "Acme Corp", domain: "acme.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-  { id: "2", name: "Globex Inc", domain: "globex.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-  { id: "3", name: "Initech", domain: "initech.com", contacts: [], tags: [], status: "active", created_at: "", updated_at: "" },
-];
-
 export default function WorkflowsPage() {
-  const { workflowTemplates: templates, setWorkflowTemplates: setTemplates } = useTeamContext();
+  const {
+    workflowTemplates: templates,
+    setWorkflowTemplates: setTemplates,
+    getRequestHeaders,
+  } = useTeamContext();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [editingTemplate, setEditingTemplate] =
-    useState<WorkflowTemplate | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<WorkflowTemplate | null>(null);
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
-  const [applyingTemplate, setApplyingTemplate] =
-    useState<WorkflowTemplate | null>(null);
+  const [applyingTemplate, setApplyingTemplate] = useState<WorkflowTemplate | null>(null);
 
-  function handleCreateTemplate(data: {
+  useEffect(() => {
+    async function loadClients() {
+      setLoading(true);
+      setPageError(null);
+      try {
+        const res = await fetch("/api/clients?status=active", {
+          headers: getRequestHeaders(),
+        });
+        const json = (await res.json()) as { data?: Client[]; error?: string };
+        if (!res.ok) {
+          setPageError(json.error ?? "Failed to load workflow data");
+          return;
+        }
+        setClients(json.data ?? []);
+      } catch {
+        setPageError("Failed to load workflow data");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadClients();
+  }, [getRequestHeaders]);
+
+  async function handleCreateTemplate(data: {
     name: string;
     description: string;
     steps: WorkflowStep[];
   }) {
-    const newTemplate: WorkflowTemplate = {
-      id: `wf-${Date.now()}`,
+    setPageError(null);
+    const optimisticId = `wf-optimistic-${Date.now()}`;
+    const optimisticTemplate: WorkflowTemplate = {
+      id: optimisticId,
       name: data.name,
       description: data.description || null,
       steps: data.steps,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    setTemplates((prev) => [newTemplate, ...prev]);
+    setTemplates((prev) => [optimisticTemplate, ...prev]);
+
+    try {
+      const res = await fetch("/api/workflows", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      const json = (await res.json()) as { data?: WorkflowTemplate; error?: string };
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? "Failed to create workflow");
+      }
+
+      setTemplates((prev) =>
+        prev.map((template) =>
+          template.id === optimisticId ? json.data! : template
+        )
+      );
+    } catch (error) {
+      setTemplates((prev) => prev.filter((template) => template.id !== optimisticId));
+      setPageError(error instanceof Error ? error.message : "Failed to create workflow");
+    }
   }
 
-  function handleEditTemplate(data: {
+  async function handleEditTemplate(data: {
     name: string;
     description: string;
     steps: WorkflowStep[];
   }) {
     if (!editingTemplate) return;
+    setPageError(null);
+
+    const previous = templates;
+    const optimisticUpdated: WorkflowTemplate = {
+      ...editingTemplate,
+      name: data.name,
+      description: data.description || null,
+      steps: data.steps,
+      updated_at: new Date().toISOString(),
+    };
     setTemplates((prev) =>
-      prev.map((t) =>
-        t.id === editingTemplate.id
-          ? {
-              ...t,
-              name: data.name,
-              description: data.description || null,
-              steps: data.steps,
-              updated_at: new Date().toISOString(),
-            }
-          : t
-      )
+      prev.map((template) => (template.id === editingTemplate.id ? optimisticUpdated : template))
     );
     setEditingTemplate(null);
+
+    try {
+      const res = await fetch(`/api/workflows/${editingTemplate.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
+        body: JSON.stringify(data),
+      });
+      const json = (await res.json()) as { data?: WorkflowTemplate; error?: string };
+      if (!res.ok || !json.data) {
+        throw new Error(json.error ?? "Failed to update workflow");
+      }
+
+      setTemplates((prev) =>
+        prev.map((template) =>
+          template.id === editingTemplate.id ? json.data! : template
+        )
+      );
+    } catch (error) {
+      setTemplates(previous);
+      setPageError(error instanceof Error ? error.message : "Failed to update workflow");
+    }
   }
 
-  function handleDeleteTemplate(templateId: string) {
-    setTemplates((prev) => prev.filter((t) => t.id !== templateId));
+  async function handleDeleteTemplate(templateId: string) {
+    setPageError(null);
+    const previous = templates;
+    setTemplates((prev) => prev.filter((template) => template.id !== templateId));
+
+    try {
+      const res = await fetch(`/api/workflows/${templateId}`, {
+        method: "DELETE",
+        headers: getRequestHeaders(),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        throw new Error(json.error ?? "Failed to delete workflow");
+      }
+    } catch (error) {
+      setTemplates(previous);
+      setPageError(error instanceof Error ? error.message : "Failed to delete workflow");
+    }
   }
 
   function handleApplyClick(template: WorkflowTemplate) {
@@ -74,10 +159,19 @@ export default function WorkflowsPage() {
     setApplyDialogOpen(true);
   }
 
-  function handleApply(templateId: string, clientId: string) {
-    // In a real app, this would call POST /api/workflows/:id/apply
-    // For now, it just shows the confirmation in the dialog
-    console.log(`Applying workflow ${templateId} to client ${clientId}`);
+  async function handleApply(templateId: string, clientId: string) {
+    const res = await fetch(`/api/workflows/${templateId}/apply`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getRequestHeaders(),
+      },
+      body: JSON.stringify({ client_id: clientId }),
+    });
+    if (!res.ok) {
+      const json = (await res.json()) as { error?: string };
+      throw new Error(json.error ?? "Failed to apply workflow");
+    }
   }
 
   return (
@@ -92,7 +186,13 @@ export default function WorkflowsPage() {
         <Button onClick={() => setFormOpen(true)}>Add Workflow</Button>
       </div>
 
-      {templates.length === 0 ? (
+      {pageError && (
+        <p className="text-sm text-destructive">{pageError}</p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading workflows...</p>
+      ) : templates.length === 0 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">
           No workflow templates yet. Create one to get started.
         </p>
@@ -103,8 +203,8 @@ export default function WorkflowsPage() {
               key={template.id}
               template={template}
               onApply={handleApplyClick}
-              onEdit={(t) => {
-                setEditingTemplate(t);
+              onEdit={(selected) => {
+                setEditingTemplate(selected);
               }}
               onDelete={handleDeleteTemplate}
             />
@@ -112,14 +212,12 @@ export default function WorkflowsPage() {
         </div>
       )}
 
-      {/* Create new template dialog */}
       <WorkflowTemplateForm
         open={formOpen}
         onOpenChange={setFormOpen}
         onSubmit={handleCreateTemplate}
       />
 
-      {/* Edit existing template dialog */}
       <WorkflowTemplateForm
         open={!!editingTemplate}
         onOpenChange={(isOpen) => {
@@ -129,12 +227,11 @@ export default function WorkflowsPage() {
         onSubmit={handleEditTemplate}
       />
 
-      {/* Apply workflow to client dialog */}
       <ApplyWorkflowDialog
         open={applyDialogOpen}
         onOpenChange={setApplyDialogOpen}
         templates={templates}
-        clients={placeholderClients}
+        clients={clients}
         defaultTemplateId={applyingTemplate?.id}
         onApply={handleApply}
       />

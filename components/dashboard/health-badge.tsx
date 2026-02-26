@@ -8,15 +8,15 @@ import type { HealthStatus } from "@/lib/types";
 const healthConfig: Record<HealthStatus, { label: string; className: string }> = {
   healthy: {
     label: "Healthy",
-    className: "bg-green-100 text-green-800 hover:bg-green-100",
+    className: "bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-950",
   },
   at_risk: {
     label: "At Risk",
-    className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
+    className: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-950 dark:text-yellow-300 dark:hover:bg-yellow-950",
   },
   churning: {
     label: "Churning",
-    className: "bg-red-100 text-red-800 hover:bg-red-100",
+    className: "bg-red-100 text-red-800 hover:bg-red-100 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-950",
   },
 };
 

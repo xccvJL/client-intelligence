@@ -23,7 +23,7 @@ export function MeetingPrep({
   clientName,
   intelligence,
 }: MeetingPrepProps) {
-  const { getPrompt } = useTeamContext();
+  const { getPrompt, getRequestHeaders } = useTeamContext();
   const [brief, setBrief] = useState<PrepBrief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,10 @@ export function MeetingPrep({
     try {
       const res = await fetch(`/api/clients/${clientId}/prep-brief`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getRequestHeaders(),
+        },
         body: JSON.stringify({ intelligence, clientName, systemPrompt: getPrompt("meeting_prep") }),
       });
 

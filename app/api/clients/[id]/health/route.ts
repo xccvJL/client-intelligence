@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
 
 // GET /api/clients/[id]/health — fetch the health record for a client.
 export async function GET(
@@ -10,6 +11,9 @@ export async function GET(
   const supabase = createServerClient();
 
   try {
+    const { teamMember } = await requireAuth(request);
+    await requireClientAccess(teamMember.id, id);
+
     const { data, error } = await supabase
       .from("client_health")
       .select("*")
@@ -33,6 +37,9 @@ export async function GET(
 
     return NextResponse.json({ data });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`GET /api/clients/${id}/health failed:`, err);
     return NextResponse.json(
       { error: "Failed to fetch health" },
@@ -51,6 +58,9 @@ export async function PUT(
   const supabase = createServerClient();
 
   try {
+    const { teamMember } = await requireAuth(request);
+    await requireClientAccess(teamMember.id, id);
+
     const body = await request.json();
     const { status, satisfaction_score, renewal_date, notes } = body;
 
@@ -94,6 +104,9 @@ export async function PUT(
       return NextResponse.json({ data }, { status: 201 });
     }
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`PUT /api/clients/${id}/health failed:`, err);
     return NextResponse.json(
       { error: "Failed to update health" },

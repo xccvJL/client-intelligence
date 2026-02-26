@@ -23,10 +23,10 @@ const roleLabels: Record<TeamRole, string> = {
 };
 
 const priorityColors: Record<TaskPriority, string> = {
-  low: "bg-gray-100 text-gray-700",
-  medium: "bg-blue-100 text-blue-700",
-  high: "bg-orange-100 text-orange-700",
-  urgent: "bg-red-100 text-red-700",
+  low: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+  medium: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  high: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  urgent: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
 
 interface TaskFromTemplateDialogProps {
@@ -117,7 +117,7 @@ export function TaskFromTemplateDialog({
                     <Badge variant="secondary" className={`text-xs ${priorityColors[step.priority]}`}>
                       {step.priority}
                     </Badge>
-                    <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
+                    <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
                       {roleLabels[step.assigned_role]}
                     </Badge>
                   </div>

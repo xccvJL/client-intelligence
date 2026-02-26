@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateHealthSummary } from "@/lib/gemini";
-import type { Intelligence, HealthStatus } from "@/lib/types";
+import type { HealthStatus } from "@/lib/types";
+import { fetchClientIntelligence } from "@/lib/intelligence";
+import { AuthError, requireAuth, requireClientAccess } from "@/lib/auth";
 
 // POST /api/clients/[id]/health-summary — generate an AI health description
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await params;
+  const { id } = await params;
 
   try {
-    const { intelligence, clientName, healthContext } = (await request.json()) as {
-      intelligence: Intelligence[];
+    const { teamMember } = await requireAuth(request);
+    await requireClientAccess(teamMember.id, id);
+
+    const { clientName, healthContext } = (await request.json()) as {
       clientName: string;
       healthContext: {
         status: HealthStatus;
@@ -30,14 +34,18 @@ export async function POST(
       );
     }
 
+    const intelligence = await fetchClientIntelligence(id);
     const summary = await generateHealthSummary(
-      intelligence ?? [],
+      intelligence,
       clientName,
       healthContext
     );
 
     return NextResponse.json({ data: summary });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("POST /api/clients/[id]/health-summary failed:", err);
     return NextResponse.json(
       { error: "Failed to generate health summary" },

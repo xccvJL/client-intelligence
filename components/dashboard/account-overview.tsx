@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { HealthBadge } from "./health-badge";
@@ -80,9 +81,10 @@ export function AccountOverview({
   stakeholders,
   onTabChange,
 }: AccountOverviewProps) {
+  const [referenceNowMs] = useState(() => Date.now());
   const renewalCountdown = health.renewal_date
     ? Math.ceil(
-        (new Date(health.renewal_date).getTime() - Date.now()) /
+        (new Date(health.renewal_date).getTime() - referenceNowMs) /
           (1000 * 60 * 60 * 24)
       )
     : null;
@@ -93,6 +95,20 @@ export function AccountOverview({
   const activeDeals = deals.filter((d) => d.stage !== "closed_lost");
   const totalDealValue = activeDeals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
   const topStakeholders = stakeholders.slice(0, 3);
+
+  function getSourceLabel(source: string) {
+    const normalized = source.trim().toLowerCase();
+    if (normalized === "email" || normalized === "gmail") return "Email";
+    if (
+      normalized === "transcript" ||
+      normalized === "google_drive" ||
+      normalized === "drive"
+    ) {
+      return "Transcript";
+    }
+    if (normalized === "manual_note" || normalized === "note") return "Note";
+    return source;
+  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
@@ -216,7 +232,7 @@ export function AccountOverview({
                       {item.sentiment}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      {item.source === "email" ? "Email" : "Transcript"} &middot; {item.date}
+                      {getSourceLabel(item.source)} &middot; {item.date}
                     </span>
                   </div>
                   <p className="text-sm line-clamp-2">{item.summary}</p>

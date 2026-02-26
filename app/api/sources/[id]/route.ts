@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { AuthError, requireAuth } from "@/lib/auth";
 
 // GET /api/sources/[id] — fetch a single knowledge source
 export async function GET(
@@ -10,6 +11,7 @@ export async function GET(
   const supabase = createServerClient();
 
   try {
+    await requireAuth(request);
     const { data, error } = await supabase
       .from("knowledge_sources")
       .select("*")
@@ -25,6 +27,9 @@ export async function GET(
 
     return NextResponse.json({ data });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`GET /api/sources/${id} failed:`, err);
     return NextResponse.json(
       { error: "Failed to fetch source" },
@@ -42,6 +47,7 @@ export async function PATCH(
   const supabase = createServerClient();
 
   try {
+    await requireAuth(request);
     const body = await request.json();
     const { name, enabled, configuration, sync_interval_minutes } = body;
 
@@ -63,6 +69,9 @@ export async function PATCH(
 
     return NextResponse.json({ data });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`PATCH /api/sources/${id} failed:`, err);
     return NextResponse.json(
       { error: "Failed to update source" },

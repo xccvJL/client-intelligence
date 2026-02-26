@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import {
+  AuthError,
+  getAccessibleClientIds,
+  requireAuth,
+  requireClientAccess,
+} from "@/lib/auth";
 
 // GET /api/deals — list deals with optional filters.
 export async function GET(request: NextRequest) {
@@ -10,9 +16,23 @@ export async function GET(request: NextRequest) {
   const stage = searchParams.get("stage");
 
   try {
+    const { teamMember } = await requireAuth(request);
+    const accessibleClientIds = await getAccessibleClientIds(teamMember.id);
+    if (accessibleClientIds.length === 0) {
+      return NextResponse.json({ data: [] });
+    }
+
+    if (clientId && !accessibleClientIds.includes(clientId)) {
+      return NextResponse.json(
+        { error: "Forbidden: no access to this account" },
+        { status: 403 }
+      );
+    }
+
     let query = supabase
       .from("deals")
-      .select("*, clients(name)");
+      .select("*, clients(name)")
+      .in("client_id", accessibleClientIds);
 
     if (clientId) query = query.eq("client_id", clientId);
     if (stage) query = query.eq("stage", stage);
@@ -25,6 +45,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("GET /api/deals failed:", err);
     return NextResponse.json(
       { error: "Failed to fetch deals" },
@@ -38,6 +61,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
 
   try {
+    const { teamMember } = await requireAuth(request);
     const body = await request.json();
     const { client_id, title, stage, amount, close_date, notes, created_by } =
       body;
@@ -49,6 +73,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await requireClientAccess(teamMember.id, client_id);
+
+    const creatorId = created_by ?? teamMember.id;
+
     const { data, error } = await supabase
       .from("deals")
       .insert({
@@ -58,7 +86,7 @@ export async function POST(request: NextRequest) {
         amount: amount ?? null,
         close_date: close_date ?? null,
         notes: notes ?? null,
-        created_by: created_by ?? null,
+        created_by: creatorId,
       })
       .select()
       .single();
@@ -67,17 +95,20 @@ export async function POST(request: NextRequest) {
 
     // Auto-add the deal creator as an "owner" of this account.
     // Uses upsert so it silently skips if they already have access.
-    if (created_by && client_id) {
+    if (creatorId && client_id) {
       await supabase
         .from("account_members")
         .upsert(
-          { client_id, team_member_id: created_by, role: "owner" },
+          { client_id, team_member_id: creatorId, role: "owner" },
           { onConflict: "client_id,team_member_id" }
         );
     }
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("POST /api/deals failed:", err);
     return NextResponse.json(
       { error: "Failed to create deal" },

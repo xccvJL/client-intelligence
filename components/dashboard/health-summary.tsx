@@ -34,9 +34,10 @@ export function HealthSummary({
 }: HealthSummaryProps) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
+  const [referenceNowMs] = useState(() => Date.now());
   const renewalCountdown = health.renewal_date
     ? Math.ceil(
-        (new Date(health.renewal_date).getTime() - Date.now()) /
+        (new Date(health.renewal_date).getTime() - referenceNowMs) /
           (1000 * 60 * 60 * 24)
       )
     : null;

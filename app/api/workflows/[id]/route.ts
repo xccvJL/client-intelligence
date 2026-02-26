@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import { AuthError, requireAuth } from "@/lib/auth";
 
 // GET /api/workflows/:id — fetch a single workflow template.
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = createServerClient();
 
   try {
+    await requireAuth(request);
     const { data, error } = await supabase
       .from("workflow_templates")
       .select("*")
@@ -20,6 +22,9 @@ export async function GET(
 
     return NextResponse.json({ data });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`GET /api/workflows/${id} failed:`, err);
     return NextResponse.json(
       { error: "Failed to fetch workflow template" },
@@ -37,6 +42,7 @@ export async function PATCH(
   const supabase = createServerClient();
 
   try {
+    await requireAuth(request);
     const body = await request.json();
     const { name, description, steps } = body;
 
@@ -56,6 +62,9 @@ export async function PATCH(
 
     return NextResponse.json({ data });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`PATCH /api/workflows/${id} failed:`, err);
     return NextResponse.json(
       { error: "Failed to update workflow template" },
@@ -66,13 +75,14 @@ export async function PATCH(
 
 // DELETE /api/workflows/:id — delete a workflow template.
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const supabase = createServerClient();
 
   try {
+    await requireAuth(request);
     const { error } = await supabase
       .from("workflow_templates")
       .delete()
@@ -82,6 +92,9 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error(`DELETE /api/workflows/${id} failed:`, err);
     return NextResponse.json(
       { error: "Failed to delete workflow template" },

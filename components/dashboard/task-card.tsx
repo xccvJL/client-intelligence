@@ -8,10 +8,10 @@ import type { Task, TaskPriority, TeamRole } from "@/lib/types";
 // source badges (Auto / Workflow), and role badge when assigned to a role.
 
 const priorityConfig: Record<TaskPriority, { label: string; className: string }> = {
-  low: { label: "Low", className: "bg-gray-100 text-gray-700 hover:bg-gray-100" },
-  medium: { label: "Medium", className: "bg-blue-100 text-blue-700 hover:bg-blue-100" },
-  high: { label: "High", className: "bg-orange-100 text-orange-700 hover:bg-orange-100" },
-  urgent: { label: "Urgent", className: "bg-red-100 text-red-700 hover:bg-red-100" },
+  low: { label: "Low", className: "bg-gray-100 text-gray-700 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-800" },
+  medium: { label: "Medium", className: "bg-blue-100 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-950" },
+  high: { label: "High", className: "bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-950 dark:text-orange-300 dark:hover:bg-orange-950" },
+  urgent: { label: "Urgent", className: "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-950" },
 };
 
 const roleLabels: Record<TeamRole, string> = {
@@ -27,9 +27,12 @@ interface TaskCardProps {
   workflowName?: string;
   onToggleStatus?: (taskId: string, done: boolean) => void;
   onClick?: (task: Task & { clients?: { name: string } | null }) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectChange?: (taskId: string, selected: boolean) => void;
 }
 
-export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onClick }: TaskCardProps) {
+export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onClick, selectable, selected, onSelectChange }: TaskCardProps) {
   const isDone = task.status === "done";
   const priority = priorityConfig[task.priority];
 
@@ -52,9 +55,19 @@ export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onC
 
   return (
     <div
-      className={`flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-muted/50 ${onClick ? "cursor-pointer" : ""}`}
+      className={`flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-muted/50 ${onClick ? "cursor-pointer" : ""} ${selected ? "bg-muted/70 border-primary/30" : ""}`}
       onClick={() => onClick?.(task)}
     >
+      {selectable && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) =>
+            onSelectChange?.(task.id, checked === true)
+          }
+          onClick={(e) => e.stopPropagation()}
+          className="min-h-[20px] min-w-[20px]"
+        />
+      )}
       <Checkbox
         checked={isDone}
         onCheckedChange={(checked) =>
@@ -81,13 +94,13 @@ export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onC
 
       <div className="flex items-center gap-2 shrink-0">
         {task.source === "auto" && (
-          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800">
             Auto
           </Badge>
         )}
 
         {task.source === "workflow" && (
-          <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200">
+          <Badge variant="outline" className="text-xs bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-800">
             Workflow
           </Badge>
         )}
@@ -97,7 +110,7 @@ export function TaskCard({ task, assigneeName, workflowName, onToggleStatus, onC
         </Badge>
 
         {task.assigned_role && !assigneeName && (
-          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200">
+          <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
             {roleLabels[task.assigned_role]}
           </Badge>
         )}

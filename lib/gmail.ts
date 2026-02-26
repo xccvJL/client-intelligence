@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { withRetry } from "./retry";
 
 // Set up OAuth2 authentication for Gmail API.
 // The refresh token lets us access Gmail without the user being present
@@ -41,25 +42,34 @@ export async function fetchNewEmails(
 
   // Search for emails after the given timestamp
   const query = `after:${afterTimestamp}`;
-  const listResponse = await gmail.users.messages.list({
-    userId: "me",
-    q: query,
-    maxResults: 50,
-  });
+  const listResponse = await withRetry(
+    () =>
+      gmail.users.messages.list({
+        userId: "me",
+        q: query,
+        maxResults: 50,
+      }),
+    { maxAttempts: 4, baseDelayMs: 500 }
+  );
 
   const messageIds = listResponse.data.messages ?? [];
   const emails: ParsedEmail[] = [];
 
   for (const msg of messageIds) {
-    if (!msg.id) continue;
+    const messageId = msg.id;
+    if (!messageId) continue;
 
-    const detail = await gmail.users.messages.get({
-      userId: "me",
-      id: msg.id,
-      format: "full",
-    });
+    const detail = await withRetry(
+      () =>
+        gmail.users.messages.get({
+          userId: "me",
+          id: messageId,
+          format: "full",
+        }),
+      { maxAttempts: 4, baseDelayMs: 500 }
+    );
 
-    const parsed = parseEmailMessage(msg.id, detail.data);
+    const parsed = parseEmailMessage(messageId, detail.data);
     if (parsed) {
       emails.push(parsed);
     }

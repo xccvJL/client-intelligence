@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase";
+import {
+  AuthError,
+  getAccessibleClientIds,
+  requireAuth,
+  requireClientAccess,
+} from "@/lib/auth";
 
 // GET /api/tasks — list tasks with optional filters.
 export async function GET(request: NextRequest) {
@@ -11,9 +17,23 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status");
 
   try {
+    const { teamMember } = await requireAuth(request);
+    const accessibleClientIds = await getAccessibleClientIds(teamMember.id);
+    if (accessibleClientIds.length === 0) {
+      return NextResponse.json({ data: [] });
+    }
+
+    if (clientId && !accessibleClientIds.includes(clientId)) {
+      return NextResponse.json(
+        { error: "Forbidden: no access to this account" },
+        { status: 403 }
+      );
+    }
+
     let query = supabase
       .from("tasks")
-      .select("*, clients(name)");
+      .select("*, clients(name)")
+      .in("client_id", accessibleClientIds);
 
     if (clientId) query = query.eq("client_id", clientId);
     if (assigneeId) query = query.eq("assignee_id", assigneeId);
@@ -27,6 +47,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: data ?? [] });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("GET /api/tasks failed:", err);
     return NextResponse.json(
       { error: "Failed to fetch tasks" },
@@ -40,6 +63,7 @@ export async function POST(request: NextRequest) {
   const supabase = createServerClient();
 
   try {
+    const { teamMember } = await requireAuth(request);
     const body = await request.json();
     const {
       client_id,
@@ -47,8 +71,10 @@ export async function POST(request: NextRequest) {
       description,
       priority,
       assignee_id,
+      assigned_role,
       due_date,
       intelligence_id,
+      workflow_template_id,
       source,
     } = body;
 
@@ -59,6 +85,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    await requireClientAccess(teamMember.id, client_id);
+
     const { data, error } = await supabase
       .from("tasks")
       .insert({
@@ -68,8 +96,10 @@ export async function POST(request: NextRequest) {
         status: "todo",
         priority: priority ?? "medium",
         assignee_id: assignee_id ?? null,
+        assigned_role: assigned_role ?? null,
         due_date: due_date ?? null,
         intelligence_id: intelligence_id ?? null,
+        workflow_template_id: workflow_template_id ?? null,
         source: source ?? "manual",
       })
       .select()
@@ -90,6 +120,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("POST /api/tasks failed:", err);
     return NextResponse.json(
       { error: "Failed to create task" },

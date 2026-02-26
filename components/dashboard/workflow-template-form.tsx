@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -59,24 +59,14 @@ export function WorkflowTemplateForm({
   template,
   onSubmit,
 }: WorkflowTemplateFormProps) {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [steps, setSteps] = useState<WorkflowStep[]>([emptyStep(1)]);
-
-  // Populate form when editing an existing template, or reset for new
-  useEffect(() => {
-    if (open) {
-      if (template) {
-        setName(template.name);
-        setDescription(template.description ?? "");
-        setSteps(template.steps.length > 0 ? template.steps : [emptyStep(1)]);
-      } else {
-        setName("");
-        setDescription("");
-        setSteps([emptyStep(1)]);
-      }
-    }
-  }, [open, template]);
+  const [name, setName] = useState(() => template?.name ?? "");
+  const [description, setDescription] = useState(
+    () => template?.description ?? ""
+  );
+  const [steps, setSteps] = useState<WorkflowStep[]>(
+    () => (template?.steps.length ? template.steps : [emptyStep(1)])
+  );
+  const formKey = `${open ? "open" : "closed"}:${template?.id ?? "new"}`;
 
   function updateStep(index: number, updates: Partial<WorkflowStep>) {
     setSteps((prev) =>
@@ -116,7 +106,7 @@ export function WorkflowTemplateForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent key={formKey} className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Edit Workflow Template" : "Create Workflow Template"}

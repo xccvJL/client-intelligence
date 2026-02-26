@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { withRetry } from "./retry";
 
 // Reuse the same OAuth2 setup as Gmail — same credentials, different API.
 function getDriveAuth() {
@@ -37,12 +38,16 @@ export async function fetchRecentTranscripts(
   // Convert timestamp to RFC 3339 format that Drive API expects
   const afterDate = new Date(afterTimestamp * 1000).toISOString();
 
-  const listResponse = await drive.files.list({
-    q: `mimeType='application/vnd.google-apps.document' and modifiedTime > '${afterDate}'`,
-    fields: "files(id, name, createdTime)",
-    orderBy: "modifiedTime desc",
-    pageSize: 25,
-  });
+  const listResponse = await withRetry(
+    () =>
+      drive.files.list({
+        q: `mimeType='application/vnd.google-apps.document' and modifiedTime > '${afterDate}'`,
+        fields: "files(id, name, createdTime)",
+        orderBy: "modifiedTime desc",
+        pageSize: 25,
+      }),
+    { maxAttempts: 4, baseDelayMs: 500 }
+  );
 
   const files = listResponse.data.files ?? [];
   const transcripts: DriveTranscript[] = [];
@@ -69,10 +74,14 @@ export async function fetchRecentTranscripts(
 async function readDocContent(auth: any, fileId: string): Promise<string | null> {
   try {
     const drive = google.drive({ version: "v3", auth });
-    const response = await drive.files.export({
-      fileId,
-      mimeType: "text/plain",
-    });
+    const response = await withRetry(
+      () =>
+        drive.files.export({
+          fileId,
+          mimeType: "text/plain",
+        }),
+      { maxAttempts: 4, baseDelayMs: 500 }
+    );
     return response.data as string;
   } catch {
     console.error(`Failed to read Google Doc ${fileId}`);

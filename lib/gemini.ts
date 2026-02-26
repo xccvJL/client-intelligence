@@ -1,5 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from "zod";
+import { parseGeminiResponse } from "./gemini-parser";
+import { withRetry } from "./retry";
+import { defaultPromptsMap } from "./default-prompts";
 import type {
   GeminiIntelligenceResponse,
   Intelligence,
@@ -21,23 +24,16 @@ function getGeminiClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
-// Zod schema to validate the AI's JSON response — makes sure it matches
-// the shape we expect, even if the model returns unexpected fields.
-const intelligenceSchema = z.object({
-  summary: z.string(),
-  key_points: z.array(z.string()),
-  sentiment: z.enum(["positive", "neutral", "negative", "mixed"]),
-  action_items: z.array(
-    z.object({
-      description: z.string(),
-      assignee: z.string().nullable(),
-      due_date: z.string().nullable(),
-    })
-  ),
-  people_mentioned: z.array(z.string()),
-  topics: z.array(z.string()),
-  client_name_guess: z.string().nullable(),
-});
+async function generateTextWithRetry(
+  model: { generateContent: (prompt: string) => Promise<{ response: { text: () => string } }> },
+  prompt: string
+): Promise<string> {
+  const result = await withRetry(
+    () => model.generateContent(prompt),
+    { maxAttempts: 4, baseDelayMs: 500 }
+  );
+  return result.response.text();
+}
 
 // Prompt templates — these tell Gemini exactly what to extract and how
 // to format the response.
@@ -77,22 +73,7 @@ Return ONLY valid JSON matching this exact shape:
 TRANSCRIPT:
 `;
 
-// Parse and validate the model's JSON response using the zod schema.
-// Returns null if the response isn't valid JSON or doesn't match the schema.
-export function parseGeminiResponse(
-  text: string
-): GeminiIntelligenceResponse | null {
-  try {
-    // Strip markdown code fences if the model wraps its response
-    const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const parsed = JSON.parse(cleaned);
-    const validated = intelligenceSchema.parse(parsed);
-    return validated;
-  } catch {
-    console.error("Failed to parse Gemini response:", text.slice(0, 200));
-    return null;
-  }
-}
+export { parseGeminiResponse } from "./gemini-parser";
 
 // Send an email to Gemini and get structured intelligence back
 export async function extractEmailIntelligence(
@@ -104,8 +85,7 @@ export async function extractEmailIntelligence(
 
   const instruction = systemPrompt ?? EMAIL_INSTRUCTION;
   const prompt = `${instruction}${EMAIL_FORMAT}${emailContent}`;
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  const text = await generateTextWithRetry(model, prompt);
   return parseGeminiResponse(text);
 }
 
@@ -119,8 +99,7 @@ export async function extractTranscriptIntelligence(
 
   const instruction = systemPrompt ?? TRANSCRIPT_INSTRUCTION;
   const prompt = `${instruction}${TRANSCRIPT_FORMAT}${transcriptContent}`;
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  const text = await generateTextWithRetry(model, prompt);
   return parseGeminiResponse(text);
 }
 
@@ -178,8 +157,7 @@ QUESTION: ${question}
 
 Provide a concise, helpful answer in plain text.`;
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  return generateTextWithRetry(model, prompt);
 }
 
 // 2. Meeting prep brief — structured briefing document for a client call
@@ -218,8 +196,8 @@ Return ONLY valid JSON matching this exact shape:
 ACCOUNT DATA:
 ${context}`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), prepBriefSchema);
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, prepBriefSchema);
 }
 
 // 3. Draft email response — create a reply to a specific intelligence entry
@@ -262,8 +240,8 @@ Return ONLY valid JSON matching this exact shape:
   "tone": "one-word description of the tone used (e.g. friendly, professional, reassuring)"
 }`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), draftResponseSchema);
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, draftResponseSchema);
 }
 
 // 4. Lead enrichment — research a company and return structured info
@@ -274,19 +252,27 @@ const leadEnrichmentSchema = z.object({
   suggested_approach: z.string(),
 });
 
-export async function enrichLead(
-  companyName: string,
-  domain: string,
-  systemPrompt?: string
-): Promise<LeadEnrichment | null> {
-  const client = getGeminiClient();
-  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-  const instruction = systemPrompt ?? `You are a sales intelligence analyst. Based on the company name and domain below,
+const fallbackLeadEnrichmentInstruction = `You are a sales intelligence analyst. Based on the company name and domain below,
 provide your best assessment of the company. Use your training knowledge — do not make up specifics
 you aren't reasonably confident about.`;
 
-  const prompt = `${instruction}
+export function getLeadEnrichmentSystemPrompt(systemPrompt?: string): string {
+  const envPrompt = process.env.LEAD_ENRICHMENT_SYSTEM_PROMPT?.trim();
+  return (
+    systemPrompt ??
+    (envPrompt && envPrompt.length > 0
+      ? envPrompt
+      : defaultPromptsMap.lead_enrichment?.defaultPrompt ??
+        fallbackLeadEnrichmentInstruction)
+  );
+}
+
+export function buildLeadEnrichmentPrompt(
+  companyName: string,
+  domain: string,
+  instruction: string
+): string {
+  return `${instruction}
 
 Company: ${companyName}
 Domain: ${domain}
@@ -298,9 +284,21 @@ Return ONLY valid JSON matching this exact shape:
   "likely_needs": ["array of likely business needs based on their industry"],
   "suggested_approach": "one paragraph on how to approach this lead"
 }`;
+}
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), leadEnrichmentSchema);
+export async function enrichLead(
+  companyName: string,
+  domain: string,
+  systemPrompt?: string
+): Promise<LeadEnrichment | null> {
+  const client = getGeminiClient();
+  const model = client.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  const instruction = getLeadEnrichmentSystemPrompt(systemPrompt);
+  const prompt = buildLeadEnrichmentPrompt(companyName, domain, instruction);
+
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, leadEnrichmentSchema);
 }
 
 // 5. Proactive nudges — generate action items across all accounts
@@ -358,8 +356,8 @@ Return ONLY a valid JSON array where each item matches this shape:
 
 Return 3-8 nudges, prioritized by urgency.`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), nudgesSchema) ?? [];
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, nudgesSchema) ?? [];
 }
 
 // 6. Account brief generation — categorise intelligence into the 5 brief sections
@@ -401,8 +399,8 @@ Each array should contain 0-5 items. If there is no relevant information for a s
 ACCOUNT DATA:
 ${context}`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), accountBriefSchema);
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, accountBriefSchema);
 }
 
 // 7. Dashboard briefing — identify the 3-5 most important things to focus on today
@@ -446,8 +444,8 @@ Return ONLY a valid JSON array where each item matches this shape:
 
 Return 3-5 items, ordered by priority (highest first).`;
 
-  const result = await model.generateContent(prompt);
-  return parseJsonResponse(result.response.text(), dashboardBriefingSchema) ?? [];
+  const text = await generateTextWithRetry(model, prompt);
+  return parseJsonResponse(text, dashboardBriefingSchema) ?? [];
 }
 
 // 8. Health summary — generate a plain-text description of the account's health
@@ -496,6 +494,6 @@ ${intelContext}
 
 Write a plain-text summary (no JSON, no markdown). Keep it to 2-4 sentences.`;
 
-  const result = await model.generateContent(prompt);
-  return result.response.text().trim();
+  const text = await generateTextWithRetry(model, prompt);
+  return text.trim();
 }
